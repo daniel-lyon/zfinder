@@ -28,5 +28,7 @@ barea = 1.1331 * bmaj * bmin
 # Corrected flux
 pix2deg = hdr['CDELT1'] # unit conversion of apsum to barea units
 total_flux = apsum*(pix2deg**2)/barea
-print(total_flux)
+print()
+print(f'.fits total image flux = {total_flux}')
+print()
 
