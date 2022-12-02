@@ -102,7 +102,7 @@ def fits_flux(image, position, radius, bvalue):
         total_bkg = bkg_mean * aperture_area
 
         # Background data
-        bkg = Background2D(page, (50, 50), exclude_percentile=10).background
+        bkg = Background2D(page, (50, 50)).background
 
         # Aperture sum of the fits image minus the background
         aphot = aperture_photometry(page - bkg, aperture)
@@ -143,7 +143,7 @@ def gaussf(x, a, x0, y0=0):
     '''
     y = y0
     for i in range(1,11):
-        y += (a * np.exp(-((x-i*x0)**2) / (1/10)*1**2)) # i = 1,2,3 ... 9, 10
+        y += (a * np.exp(-((x-i*x0)**2) / (1/12)*1**2)) # i = 1,2,3 ... 9, 10
     
     return y
 

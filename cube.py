@@ -51,24 +51,19 @@ z = np.linspace(z_start, z_end, z_n)
 # Gaussian Model parameter setup
 chi2_vs_z = []
 amplitude = 1
-sigma = 1
-y0 = 0.02
+y0 = 0
 
 # For every redshift, calculate the corresponding chi squared value
 for ddz in z:
     mean = 115.2712/(1+ddz)
 
-    try:
-        popt, pcov = curve_fit(gaussf, x, y_flux, p0=[amplitude, mean], absolute_sigma=False)
-    except RuntimeError:
-        chi2_vs_z.append(99) # if there is no good fit, append maximum (worst) value
-        continue
+    popt, pcov = curve_fit(lambda x, a: gaussf(x, a, mean, y0), x, y_flux, absolute_sigma=True)
+    
+    f_exp = gaussf(x, *popt, mean, y0=y0)
 
-    f_exp = gaussf(x, *popt, y0=y0)
+    uncert = arrayfix(uncert) # average 0's from values left & right
 
-    uncert = arrayfix(uncert)
-
-    chi2 = sum(((y_flux - f_exp) / uncert)**2)/len(popt)
+    chi2 = sum(((y_flux - f_exp) / uncert)**2)
 
     chi2_vs_z.append(chi2)
 
@@ -85,7 +80,8 @@ plt.show()
 plt.figure(figsize=(15,5))
 plt.plot([84.2, 115], [0, 0], color='black', linestyle='--', dashes=(5,5))
 plt.plot(x, y_flux, color='black', drawstyle='steps-mid')
-plt.plot(x, gaussf(x, *popt, y0=y0), color='red')
+plt.plot(x, gaussf(x, *popt, mean, y0=y0), color='red')
+# plt.title('z=')
 plt.fill_between(x, y_flux, 0, where=(y_flux > 0), color='gold', alpha=0.5)
 plt.xlabel('Frequency $(GHz)$')
 plt.ylabel('Flux $(mJy)$')
