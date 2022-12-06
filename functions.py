@@ -1,7 +1,9 @@
 # Required functions
 import numpy as np
+from astropy.io import fits
 from astropy.wcs import WCS
 from PyAstronomy import pyasl
+from scipy.optimize import curve_fit
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
@@ -99,7 +101,7 @@ def fits_flux(image, position, radius, bvalue):
         anullusstats = ApertureStats(page, annulus)
         bkg_mean = anullusstats.mean
         aperture_area = aperture.area_overlap(page)
-        total_bkg = bkg_mean * aperture_area
+        freq_uncert = bkg_mean * aperture_area
 
         # Background data
         bkg = Background2D(page, (50, 50)).background
@@ -111,11 +113,11 @@ def fits_flux(image, position, radius, bvalue):
         # Calculate corrected flux
         total_flux = apsum*(pix2deg**2)/barea
         fluxes.append(total_flux)
-        uncertainties.append(total_bkg)
+        uncertainties.append(freq_uncert)
 
     return np.array(fluxes), np.array(uncertainties)
 
-def gaussf(x, a, x0, y0=0):
+def gaussf(x, x0):
     ''' Function to calculate a gaussian distriubtion
 
     Parameters
@@ -141,14 +143,82 @@ def gaussf(x, a, x0, y0=0):
         List of y-values forming the distribution
     
     '''
-    y = y0
+    y = 0
     for i in range(1,11):
-        y += (a * np.exp(-((x-i*x0)**2) / (1/12)*1**2)) # i = 1,2,3 ... 9, 10
+        y += (0.26 * np.exp(-((x-i*x0)**2) / (1/5)**2)) # i = 1,2,3 ... 9, 10
     
     return y
 
 def arrayfix(array):
+    ''' Function to remove invalid values
+
+    Parameters
+    ----------
+    arrary : list
+        A list of values
+    
+    Returns
+    -------
+    array : list
+        A list of fixed values
+    
+    '''
     for i, val in enumerate(array):
         if val == 0:
             array[i] = (array[i-1] + array[i+1])/2
     return array
+
+# def redshift_det(filename, rightAscension=None, Declination=None, x=None, y=None, radius, bvalue, z_start, dz, z_end, transition):
+
+#     # Read .fits image
+#     image = fits.open(filename)
+
+#     # Get the header
+#     hdr = image[0].header
+#     data = image[0].data[0]
+
+#     # Raise error if some of the coordinates are missing
+#     if (rightAscension == None or Declination == None) and (x == None or y == None):
+#         raise ValueError('You must use both Right Ascension and Declination or x and y coordinates.')
+    
+#     # Raise error if both types of coordinares are defined
+#     elif (rightAscension != None or Declination != None) and (x != None or y != None):
+#         raise ValueError('Both FK5 (ra/dec) and physical (x/y) have been defined. You must only choose one.')
+    
+#     # If rightAscension and Declination are defined but not x and y, convert ra & dec to x/y
+#     elif (rightAscension != None and Declination != None) and (x == None and y == None):
+#         x, y = wcs2pix(rightAscension, Declination, hdr)
+    
+#     # Get fluxes and ucnertainties at each image
+#     y_flux, uncert = fits_flux(image, (x, y), radius, bvalue)
+#     uncert = arrayfix(uncert) # average 0's from values left & right
+#     y_flux *= 1000 # Convert uJy to mJy
+#     uncert *= 1000 # Convert uJy to mJy
+
+#     # Convert x-axis to Hz
+#     freq_start = hdr['CRVAL3']/10**9 # GHz
+#     freq_incr = hdr['CDELT3']/10**9 # GHz
+#     freq_len = np.shape(data)[0] # length
+#     freq_end = freq_start + freq_len * freq_incr # where to stop
+#     x = np.linspace(freq_start, freq_end, freq_len) # axis to plot
+
+#     # Redshift parameter setup
+#     z_n = int((1/dz)*(z_end-z_start))+1 # all the redshifts to iterate through
+#     z = np.linspace(z_start, z_end, z_n)
+#     chi2_vs_z = []
+
+#     # For every redshift, calculate the corresponding chi squared value
+#     for ddz in z:
+#         mean = transition/(1+ddz) #115.2712
+
+#         parameters, covariance = curve_fit(lambda x, b: gaussf(x, x0=mean), x, y_flux, absolute_sigma=True)
+        
+#         f_exp = gaussf(x, mean)
+
+#         chi2 = sum(((y_flux - f_exp) / 0.1)**2)
+
+#         chi2_vs_z.append(chi2)
+    
+#     return z, chi2_vs_z
+
+    
