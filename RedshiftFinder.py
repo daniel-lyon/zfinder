@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 
 from time import time
 from random import random
+from decimal import Decimal
 from astropy.wcs import WCS
 from astropy.io import fits
 from PyAstronomy import pyasl
@@ -126,7 +127,7 @@ class RedshiftFinder:
     def circlePointVars(self, minimum_point_distance, num_plots, circle_radius):
         
         self.centre_x, self.centre_y = self.wcs2pix(self.ra, self.dec, self.hdr)
-        self.plot_colours = []
+        self.plotColours = []
         self.minimum_point_distance = minimum_point_distance
         self.num_plots = num_plots
         if self.num_plots < 4 and self.num_plots > 1:
@@ -137,17 +138,18 @@ class RedshiftFinder:
     def zfind(self, ftransition, zStart=0, dz=0.01, zEnd=10, timer=False):
         self.coordinates = self.spacedPointsCircle(self.num_plots, self.circle_radius, centre_coords=self.points, minimum_spread_distance=self.minimum_point_distance)
         self.ftransition = ftransition 
+        self.dz = dz
 
         freq_start = self.hdr['CRVAL3']/10**9 # GHz
         freq_incr = self.hdr['CDELT3']/10**9 # GHz
         freq_len = np.shape(self.data)[0] # length
         freq_end = freq_start + freq_len * freq_incr # where to stop
-        self.x_axis = np.linspace(freq_start, freq_end, freq_len) # axis to plot
+        self.xAxisFlux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
 
         z_n = int((1/dz)*(zEnd-zStart))+1 # number of redshifts to iterate through
         self.z = np.linspace(zStart, zEnd, z_n) # redshift array
-        self.all_chi2_arrays = []
-        self.all_fluxes = []
+        self.allChi2 = []
+        self.allFlux = []
 
         start = time()
 
@@ -156,7 +158,7 @@ class RedshiftFinder:
             # Get fluxes and ucnertainties at each image
             chi2_array = [] # initial 
             y_flux, uncert = self.fits_flux(coord)
-            self.all_fluxes.append(y_flux)
+            self.allFlux.append(y_flux)
             uncert = self.arrayfix(uncert) # average 0's from values left & right
             y_flux *= 1000 # convert from uJy to mJy
             uncert *= 1000
@@ -164,24 +166,24 @@ class RedshiftFinder:
             # For every redshift, calculate the corresponding chi squared value
             for ddz in self.z:
                 loc = ftransition/(1+ddz) # location of the gaussian peak
-                parameters, covariance = curve_fit(lambda x, b: self.gaussf(x, x0=loc), self.x_axis, y_flux, absolute_sigma=True) # best fit
-                f_exp = self.gaussf(self.x_axis, loc) # expected function
+                parameters, covariance = curve_fit(lambda x, b: self.gaussf(x, x0=loc), self.xAxisFlux, y_flux, absolute_sigma=True) # best fit
+                f_exp = self.gaussf(self.xAxisFlux, loc) # expected function
                 chi2 = sum(((y_flux - f_exp))**2)
                 chi2_array.append(chi2)
 
             min_plot_chi2 = min(chi2_array)
             
             if index == 0:
-                self.plot_colours.append('black')
+                self.plotColours.append('black')
                 target_chi2 = min_plot_chi2
             elif min_plot_chi2 <= target_chi2:
-                self.plot_colours.append('red')
+                self.plotColours.append('red')
             elif min_plot_chi2 > target_chi2 and min_plot_chi2 <= 1.05*target_chi2:
-                self.plot_colours.append('gold')
+                self.plotColours.append('gold')
             else:
-                self.plot_colours.append('green')
+                self.plotColours.append('green')
             
-            self.all_chi2_arrays.append(chi2_array)
+            self.allChi2.append(chi2_array)
 
             if timer == True:
                 print(f'{index+1}/{len(self.coordinates)} ...')
@@ -189,8 +191,6 @@ class RedshiftFinder:
         end = time()
         if timer == True:
             print(f'Took {round((end-start)/60, 3)} minutes to process data')
-        
-        return self.all_chi2_arrays, self.z, self.coordinates, self.plot_colours, self.all_fluxes, self.x_axis
 
     def plotCoords(self, savefile=None):
         circle_points = np.transpose(self.coordinates)
@@ -202,7 +202,7 @@ class RedshiftFinder:
         fig.set_figheight(7)
         ax.add_patch(circ)
         plt.title('Distribution of spaced random points')
-        plt.scatter(points_x, points_y, color=self.plot_colours)
+        plt.scatter(points_x, points_y, color=self.plotColours)
         plt.xlim(-self.circle_radius-1+self.centre_x, self.circle_radius+1+self.centre_x)
         plt.ylim(-self.circle_radius-1+self.centre_y, self.circle_radius+1+self.centre_y)
         plt.xlabel('x')
@@ -219,10 +219,12 @@ class RedshiftFinder:
             fig.supxlabel('Redshift')
             fig.supylabel('$\chi^2$', x=0.01)
             axs = axs.flatten()
-            for index, array in enumerate(self.all_chi2_arrays):
-                axs[index].plot(self.z, array, color=self.plot_colours[index])
-                coord = np.round(self.coordinates[index], 4)
-                axs[index].set_title(f'Positioned on x,y = {coord}')
+            for index, array in enumerate(self.allChi2):
+                lowest_redshift = self.z[np.argmin(self.allChi2[index])]
+                axs[index].plot(self.z, array, color=self.plotColours[index])
+                axs[index].plot(lowest_redshift, min(array), 'bo', markersize=5)
+                coord = np.round(self.coordinates[index], 2)
+                axs[index].set_title(f'x,y = {coord}. Min Chi2 = {round(min(array), 2)}')
                 axs[index].set_yscale('log')
             plt.yscale('log')
             plt.show()
@@ -230,7 +232,7 @@ class RedshiftFinder:
                 fig.savefig(f'{savefile}', dpi=200)
             
         else:
-            plt.plot(self.z, self.all_chi2_arrays[0])
+            plt.plot(self.z, self.allChi2[0])
             plt.title('Distribution of spaced random points')
             plt.xlabel('Redshift')
             plt.ylabel('$\chi^2$')
@@ -240,6 +242,9 @@ class RedshiftFinder:
                 plt.savefig(f'{savefile}', dpi=200)
 
     def plotFlux(self, savefile=None):
+
+        d = Decimal(str(self.dz))
+        d = abs(d.as_tuple().exponent)
         
         if self.num_plots >= 4:
             row_col = int(np.sqrt(self.num_plots))
@@ -247,26 +252,26 @@ class RedshiftFinder:
             fig.supxlabel('Frequency $(GHz)$')
             fig.supylabel('Flux $(mJy)$')
             axs = axs.flatten()
-            for index, array in enumerate(self.all_fluxes):
-                lowest_redshift = self.z[np.argmin(self.all_chi2_arrays[index])]
-                axs[index].plot(self.x_axis, array, color='black', drawstyle='steps-mid')
-                axs[index].plot(self.x_axis, self.gaussf(self.x_axis, self.ftransition/(1+lowest_redshift)), color='red')
+            for index, array in enumerate(self.allFlux):
+                lowest_redshift = self.z[np.argmin(self.allChi2[index])]
+                axs[index].plot(self.xAxisFlux, array, color='black', drawstyle='steps-mid')
+                axs[index].plot(self.xAxisFlux, self.gaussf(self.xAxisFlux, self.ftransition/(1+lowest_redshift)), color='red')
                 axs[index].margins(x=0)
-                axs[index].fill_between(self.x_axis, self.all_fluxes[index], 0, where=(self.all_fluxes[index] > 0), color='gold', alpha=0.75)
-                axs[index].set_title(f'z={lowest_redshift}')
+                axs[index].fill_between(self.xAxisFlux, self.allFlux[index], 0, where=(self.allFlux[index] > 0), color='gold', alpha=0.75)
+                axs[index].set_title(f'z={round(lowest_redshift, d)}')
 
             if savefile != None:
                 fig.savefig(f'{savefile}', dpi=200)
             plt.show()
 
         else:
-            lowest_redshift = self.z[np.argmin(self.all_chi2_arrays[0])]
+            lowest_redshift = self.z[np.argmin(self.allChi2[0])]
             plt.figure(figsize=(15,5))
-            plt.plot([min(self.x_axis), max(self.x_axis)], [0, 0], color='black', linestyle='--', dashes=(5,5))
-            plt.plot(self.x_axis, self.all_fluxes[0], color='black', drawstyle='steps-mid')
-            plt.plot(self.x_axis, self.gaussf(self.x_axis, self.ftransition/(1+lowest_redshift)), color='red')
-            plt.title(f'z={lowest_redshift}')
-            plt.fill_between(self.x_axis, self.all_fluxes[0], 0, where=(self.all_fluxes[0] > 0), color='gold', alpha=0.75)
+            plt.plot([min(self.xAxisFlux), max(self.xAxisFlux)], [0, 0], color='black', linestyle='--', dashes=(5,5))
+            plt.plot(self.xAxisFlux, self.allFlux[0], color='black', drawstyle='steps-mid')
+            plt.plot(self.xAxisFlux, self.gaussf(self.xAxisFlux, self.ftransition/(1+lowest_redshift)), color='red')
+            plt.title(f'z={round(lowest_redshift, d)}')
+            plt.fill_between(self.xAxisFlux, self.allFlux[0], 0, where=(self.allFlux[0] > 0), color='gold', alpha=0.75)
             plt.xlabel('Frequency $(GHz)$')
             plt.ylabel('Flux $(mJy)$')
             plt.margins(x=0)
