@@ -8,7 +8,7 @@
 
 ICRAR summer studentship project "Monster Black Holes at The Dawn of Time". Using the transition lines of emission spectra, the most likely redshift is determined by fitting gaussian lines to flux data. 
 
-Example Usage
+Example Usage Source: J085614 + 022400
 -------------
 
 <h1 align="left">
