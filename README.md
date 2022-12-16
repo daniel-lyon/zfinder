@@ -1,5 +1,5 @@
 <h1 align="center">
-<img src="/branding/logo/primary/numpylogo.svg" width="300">
+<img src="https://en.wikipedia.org/wiki/Redshift#/media/File:Redshift.svg">
 </h1>
 
 # ICRAR-Monster-Black-Holes
