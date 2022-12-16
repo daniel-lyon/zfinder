@@ -2,12 +2,8 @@
 ICRAR summer studentship project "Monster Black Holes at The Dawn of Time"
 
 <h1 align="center">
-  <div>
-    <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/redshift.png">
-  </div>
-  <div>
-    <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/icrar_logo.png" width="200">
-  </div>
+  <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/redshift.png">
+  <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/icrar_logo.png" width="200">
 </h1>
 
 <h1 align="left">
