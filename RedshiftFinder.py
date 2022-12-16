@@ -17,20 +17,55 @@ from scipy.stats import binned_statistic
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
+def average_zeroes(data):
+    ''' Take the average of adjacent points (left and right) if the value is zero.
+
+    Parameters
+    ----------
+    data : list
+        A list of data on which to operate
+
+    Returns
+    -------
+    data : list
+        An updated list of data with zeroes averaged
+    '''
+    for i, val in enumerate(data):
+        if val == 0:
+            data[i] = (data[i-1] + data[i+1])/2
+    return data
+
 def count_decimals(number):
+    ''' count the amount of numbers in the decimal places
+
+    Parameters
+    ----------
+    number : float
+        The given float to count the number of decimal places
+
+    Returns
+    -------
+    d : int
+        The count of decimal places
+    '''
     d = Decimal(str(number))
     d = abs(d.as_tuple().exponent)
     return d
 
-def list_div_list(numerator_list, denominator_list):
-    return_list = []
-    for num, den in zip(numerator_list, denominator_list):
-        return_list.append(num/den)
-    return return_list
+def flatten_list(input_list):
+    ''' Turns lists of lists into a single list
 
-def flatten_list(input_array):
+    Parameters
+    ----------
+    input_list : list
+        A list of lists to flatten
+
+    Returns
+    -------
+        A flattened list
+    '''
     return_array = []
-    for array in input_array:
+    for array in input_list:
         for x in array:
             return_array.append(x)
     return return_array
@@ -40,9 +75,8 @@ class RedshiftFinder(object):
     `RedshiftFinder` looks at transition lines and attempts to find the best fitting red shift.
     This operates by plotting gaussian functions over the data and calculating the chi-squared
     at small changes in red shift. By taking the minimised chi-squared result, the most likely 
-    red shift result is returned
+    red shift result is returned. Unrealistic and/or bad fits penalise the chi2 to be higher.
     '''
-
     def __init__(self, image, rightAscension, declination, apertureRadius, bvalue, warnings=False):
         self.image = fits.open(image)
         self.hdr = self.image[0].header
@@ -60,10 +94,27 @@ class RedshiftFinder(object):
 
     @staticmethod
     def wcs2pix(ra, dec, hdr):
-        '''
-        Convert right ascension and declination to x, y positional world coordinates
-        '''
+        ''' Convert right ascension and declination to x, y positional world coordinates
 
+        Parameters
+        ----------
+        ra : list
+            Right ascension coordinate given [h, m, s]
+        
+        dec : list
+            Declination coordinate given as [d, m, s, esign]
+
+        hdr : `astropy.io.fits.header.Header`
+            The image header
+        
+        Returns
+        -------
+        xcor : int
+            The transformed ra to world coordinate
+        
+        ycor : int
+            The transformed dec to world coordinate
+        '''
         w = WCS(hdr) # Get the world coordinate system
     
         # If there are more than 2 axis, drop them
@@ -85,9 +136,27 @@ class RedshiftFinder(object):
         return xcor, ycor
     
     @staticmethod
-    def spaced_circle_points(num_points, circle_radius, centre_coords, minimum_spread_distance):
-        '''
-        Generates points in a circle that are a minimum distance a part
+    def spaced_circle_points(num_points=1, circle_radius=50, centre_coords=[0,0], minimum_spread_distance=1):
+        ''' Generate points in a circle that are a minimum distance a part
+
+        Parameters
+        ----------
+        num_points : int, optional
+            The number of points to plot. Defaults to 1
+        
+        circle_radius : float, optional
+            The radius in which points can be plotted around the centre. Defaults to 50
+        
+        centre_coords : list, optional
+            The centre of the circle. Defautls to [0,0]
+        
+        minimum_spread_distance : float, optional
+            The minimum distance between points. Defaults to 1.
+        
+        Returns
+        -------
+        points: list
+            A list of points containing x, y coordinates.
         '''
         # centre_coords = [x,y] -> points = [[x,y]]
         points = [centre_coords]
@@ -115,19 +184,27 @@ class RedshiftFinder(object):
         return points
     
     @staticmethod
-    def arrayfix(array):
-        '''
-        Dividing by an array with zeroes will error. Take the average of adjacent points. 
-        '''
-        for i, val in enumerate(array):
-            if val == 0:
-                array[i] = (array[i-1] + array[i+1])/2
-        return array
-    
-    @staticmethod
     def gaussf(x, a, s, x0):
-        '''
-        Gaussian function used to fit the data
+        ''' Gaussian function used to fit to a data set
+
+        Parameters
+        ----------
+        x : list
+            the x-axis list
+        
+        a : float
+            the amplitude of the gaussians
+        
+        s : float
+            the standard deviation and width of the gaussians
+        
+        x0 : float
+            the x-axis offset
+        
+        Returns
+        -------
+        y : list
+            the corresponding y-axis 
         '''
         y = 0
         for i in range(1,12):
@@ -135,10 +212,21 @@ class RedshiftFinder(object):
         return y
     
     def fits_flux(self, position):
-        '''
-        For every frequency channel, find the flux and associated uncertainty.
-        '''
+        ''' For every frequency channel, find the flux and associated uncertainty.
 
+        Parameters
+        ----------
+        position : list
+            an x,y coodinate to measure the flux at.
+
+        Returns
+        -------
+        fluxes : 'numpy.ndarray'
+            A numpy array of fluxes at every frequency
+        
+        uncertainties : 'numpy.ndarray'
+            A numpy array of uncertainties at every frequency
+        '''
         # Initialise array of fluxes and uncertainties to be returned
         fluxes = []
         uncertainties = []
@@ -174,11 +262,9 @@ class RedshiftFinder(object):
 
         return np.array(fluxes), np.array(uncertainties)
 
-    def circle_point_vars(self, minimum_point_distance, num_plots, circle_radius):
-        '''
-        Values for the user to specify about the circular points
-        '''
-        
+    def circle_point_vars(self, minimum_point_distance=1, num_plots=1, circle_radius=50):
+        ''' Values for the user to specify about the circular points called by 'spaced_circle_points' '''
+
         self.centre_x, self.centre_y = self.wcs2pix(self.ra, self.dec, self.hdr)
         self.plotColours = []
         self.minimum_point_distance = minimum_point_distance
@@ -188,15 +274,42 @@ class RedshiftFinder(object):
         self.circle_radius = circle_radius
         self.points = [self.centre_x, self.centre_y]
 
-    def zfind(self, ftransition, zStart=0, dz=0.01, zEnd=10):
+    def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
+        ''' For every point in coordinates, find the flux and uncertainty. Then find the significant
+        lines with the line finder. For each point, iterate through all redshift values and calculate
+        the chi-squared that corresponds to that redshift by fitting gaussians to overlay the flux. If
+        The points found by the line finder do not match within 4 frequency channels of the gaussian
+        peaks, penalise the chi-squared at that redshift by a factor of 1.2.
+
+        Parameters
+        ----------
+        ftransition : float
+            The first transition frequency (in GHz) of the target element/molecule/etc
         
+        z_start : float, optional
+            The starting value of redshift value. Default = 0
+        
+        dz : float, optional
+            The change in redshift to iterature through. Default = 0.01
+        
+        z_end : float, optional
+            The final redshift  value. Default = 10
+        
+        Returns
+        -------
+        self.allLowestZ : list
+            A list of the lowest measured redshift values with lenght equal to the number of points.
+        
+        '''
         # Object values
         self.dz = dz
         self.ftransition = ftransition 
         self.allChi2 = []
         self.allFlux = []
         self.allParams = []
-        self.allSNR_scales = []
+        self.allSnrs = []
+        self.allScales = []
+        self.allLowestZ = []
 
         # Generate the random coordinates for statistical analysis
         self.coordinates = self.spaced_circle_points(self.num_plots, self.circle_radius, 
@@ -210,7 +323,7 @@ class RedshiftFinder(object):
         self.xAxisFlux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
 
         # Create the redshift values to iterate through
-        self.z = np.arange(zStart, zEnd+dz, dz) # number of redshifts to iterate through
+        self.z = np.arange(z_start, z_end+dz, dz) # number of redshifts to iterate through
 
         start = time() # Measure how long it takes to execute 
 
@@ -225,7 +338,7 @@ class RedshiftFinder(object):
             y_flux, uncert = self.fits_flux(coord)
             self.allFlux.append(y_flux)
 
-            uncert = self.arrayfix(uncert) # average 0's from values left & right
+            uncert = average_zeroes(uncert) # average 0's from values left & right
             y_flux *= 1000; uncert *= 1000 # convert from uJy to mJy
             
             # Create a line finder to find significant points
@@ -238,17 +351,17 @@ class RedshiftFinder(object):
             # Calculate the ratio of the snrs and scales
             snrs = [round(i,2) for i in s.peak_snrs] # the snrs of the peaks
             scales = [i[1]-i[0] for i in s.channel_edges] # the scales of the peaks
-            snr_div_scale = list_div_list(snrs, scales)
 
             # For every redshift, calculate the corresponding chi squared value
             for ddz in self.z:
                 loc = ftransition/(1+ddz) # location of the gaussian peaks
                 
+                # Determine the best fitting parameters
                 try:
                     params, covariance = curve_fit(lambda x, a, s: self.gaussf(x, a, s, x0=loc), 
                         self.xAxisFlux, y_flux, bounds=[[0, (1/8)], [max(y_flux), (2/3)]], absolute_sigma=True) # best fit
                 except RuntimeError:
-                    chi2_array.append(max(chi2_array))
+                    chi2_array.append(max(chi2_array)) # if no returned parameters, set the chi-squared for this redshift to the maximum
                     continue
                 
                 # Using the best fit parameters, calculate the chi2 corresponding to this redshift {ddz}
@@ -288,34 +401,61 @@ class RedshiftFinder(object):
                 self.plotColours.append('gold') # if chi2 within 5% above the original
             else:
                 self.plotColours.append('green') # if chi2 more than 5% above the original
+
+            # Find the lowest redshift of each source point
+            lowest_index = np.argmin(chi2_array)
+            lowest_redshift = self.z[lowest_index]
             
             # Append parameters for use later
             self.allChi2.append(chi2_array)
             self.allParams.append(param_array)
-            self.allSNR_scales.append(snr_div_scale)
+            self.allSnrs.append(snrs)
+            self.allScales.append(scales)
+            self.allLowestZ.append(lowest_redshift)
 
             print(f'{index+1}/{len(self.coordinates)} completed..')
 
         end = time()
         print(f'Data processed in {round((end-start)/60, 3)} minutes')
+        return self.allLowestZ
 
 class zf_plotter(RedshiftFinder):
-
-    def __init__(self, obj):
+    ''' `zf_plotter` takes a `RedshiftFinder` object as an input to easily compute plots
+    used for statistical analysis.
+    '''
+    def __init__(self, obj, plots_per_page=25):
         self.obj = obj
+
+        # The number of pages of data to plot
+        self.pages = self.obj.num_plots // plots_per_page
+        if self.pages == 0:
+            self.pages = 1
         
-        num_plots = self.obj.num_plots
-        if num_plots >= 5:
+        # The number of rows and columns used for each page
+        if self.obj.num_plots >= 5:
             self.cols = 5
-            self.rows = num_plots // self.cols
+            self.rows = self.obj.num_plots // (self.cols * self.pages)
             self.squeeze = True
         else:
             self.cols = 1
             self.rows = 1
             self.squeeze = False
-
+        
     @staticmethod
     def plot_peaks(y_axis, x_axis, plot_type):
+        ''' Plot the found peaks of a line finder on top of another plot.
+
+        Parameters
+        ----------
+        y_axis : list
+            The y-axis with which to find the significant peaks
+
+        x_axis : list
+            The x-axis with which to plot the significant peaks
+
+        plot_type : 'matplotlib.axes._subplots.AxesSubplot'
+            : The figure to plot the peaks on 
+        '''
         s = Spectrum(y_axis)
         s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
         peaks = s.channel_peaks
@@ -331,6 +471,13 @@ class zf_plotter(RedshiftFinder):
             plot_type.text(x_axis[i], sc_text, s=f'scale={sc}', color='blue')
 
     def plot_points(self, savefile=None):
+        ''' Plot the distribution of coordinates
+
+        Parameters
+        ----------
+        savefile : str, None, optional
+            The filename of the saved figure. Default = None
+        '''
         circle_points = np.transpose(self.obj.coordinates)
         points_x = circle_points[0, :] # all x coordinates except the first which is the original
         points_y = circle_points[1, :] # all y coordinates except the first which is the original
@@ -345,108 +492,157 @@ class zf_plotter(RedshiftFinder):
         plt.ylim(-self.obj.circle_radius-1+self.obj.centre_y, self.obj.circle_radius+1+self.obj.centre_y)
         plt.xlabel('x')
         plt.ylabel('y')
-
         if savefile != None:
             plt.savefig(f'{savefile}', dpi=200)
         plt.show()
     
     def plot_chi2(self, savefile=None):
+        ''' Plot the chi-squared vs redshift at every coordinate
 
-        # Setup the figure and axes
-        fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharex=True, squeeze=self.squeeze)
-        fig.supxlabel('Redshift')
-        fig.supylabel('$\chi^2$', x=0.01)
-        axs = axs.flatten()
+        Parameters
+        ----------
+        savefile : str, None, optional
+            The filename of the saved figure. Default = None
+        '''
+        allChi2 = np.array_split(self.obj.allChi2, self.pages)
+        AllColours = np.array_split(self.obj.plotColours, self.pages)
+        AllCoords = np.array_split(self.obj.coordinates, self.pages)
+        
+        # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
+        for chi2, colours, coordinates in zip(allChi2, AllColours, AllCoords):
 
-        # Plot the chi-squared(s) and redshift
-        for index, chi2 in enumerate(self.obj.allChi2):
-            lowest_redshift = self.obj.z[np.argmin(self.obj.allChi2[index])]
-            axs[index].plot(self.obj.z, chi2, color=self.obj.plotColours[index])
-            axs[index].plot(lowest_redshift, min(chi2), 'bo', markersize=5)
-            coord = np.round(self.obj.coordinates[index], 2)
-            axs[index].set_title(f'x,y = {coord}. Min Chi2 = {round(min(chi2), 2)}')
-            axs[index].set_yscale('log')
+            # Setup the figure and axes
+            fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharex=True, squeeze=self.squeeze)
+            fig.supxlabel('Redshift')
+            fig.supylabel('$\chi^2$', x=0.01)
+            axs = axs.flatten()
 
-        # Save the file and show
-        if savefile != None:
-            fig.savefig(f'{savefile}', dpi=200)
-        plt.show()
+            # Plot the chi-squared(s) and redshift
+            for index, (c2, color, coordinate) in enumerate(zip(chi2, colours, coordinates)):
+                lowest_redshift = self.obj.z[np.argmin(c2)]
+                axs[index].plot(self.obj.z, c2, color=color)
+                axs[index].plot(lowest_redshift, min(c2), 'bo', markersize=5)
+                coord = np.round(coordinate, 2)
+                axs[index].set_title(f'x,y = {coord}. Min Chi2 = {round(min(c2), 2)}')
+                axs[index].set_yscale('log')
+                print(type(axs[index]))
+
+            # Save the file and show
+            if savefile != None:
+                fig.savefig(f'{savefile}', dpi=200)
+            plt.show()
 
     def plot_flux(self, savefile=None):
-        
-        # Setup the figure and axes
-        d = count_decimals(self.obj.dz)
-        fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, 
-            sharex=True, sharey=True, squeeze=self.squeeze)
-        fig.supxlabel('Frequency $(GHz)$')
-        fig.supylabel('Flux $(mJy)$')
-        axs = axs.flatten()
+        ''' Plot the flux vs frequency at every coordinate
 
-        # Plot the flux(s) and best fit gaussians
-        for index, flux in enumerate(self.obj.allFlux):
-            lowest_index = np.argmin(self.obj.allChi2[index])
-            lowest_redshift = self.obj.z[lowest_index]
-            axs[index].plot(self.obj.xAxisFlux, flux, color='black', drawstyle='steps-mid')
-            axs[index].plot(self.obj.xAxisFlux, self.obj.gaussf(self.obj.xAxisFlux, *self.obj.allParams[index][lowest_index], 
-                x0=self.obj.ftransition/(1+lowest_redshift)), color='red')
-            axs[index].margins(x=0)
-            axs[index].fill_between(self.obj.xAxisFlux, flux, 0, where=(flux > 0), color='gold', alpha=0.75)
-            axs[index].set_title(f'z={round(lowest_redshift, d)}')
-            self.plot_peaks(flux, self.obj.xAxisFlux, axs[index])
-        
-        # Save the file and show
-        if savefile != None:
-            fig.savefig(f'{savefile}', dpi=200)
-        plt.show()
+        Parameters
+        ----------
+        savefile : str, None, optional
+            The filename of the saved figure. Default = None
+        '''
+        # Split data into pages
+        allChi2 = np.array_split(self.obj.allChi2, self.pages)
+        allFlux = np.array_split(self.obj.allFlux, self.pages)
+        AllParams = np.array_split(self.obj.allParams, self.pages)
+        d = count_decimals(self.obj.dz) # decimal places to round to
+
+        # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
+        for fluxes, chi2, params in zip(allFlux, allChi2, AllParams):
+
+            # Setup the figure and axes
+            fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, 
+                sharex=True, sharey=True, squeeze=self.squeeze)
+            fig.supxlabel('Frequency $(GHz)$')
+            fig.supylabel('Flux $(mJy)$')
+            axs = axs.flatten()
+
+            # Plot the flux(s) and best fit gaussians
+            for index, (flux, c2, param) in enumerate(zip(fluxes, chi2, params)):
+                lowest_index = np.argmin(c2)
+                lowest_redshift = self.obj.z[lowest_index]
+                axs[index].plot(self.obj.xAxisFlux, flux, color='black', drawstyle='steps-mid')
+                axs[index].plot(self.obj.xAxisFlux, self.obj.gaussf(self.obj.xAxisFlux, *param[lowest_index], 
+                    x0=self.obj.ftransition/(1+lowest_redshift)), color='red')
+                axs[index].margins(x=0)
+                axs[index].fill_between(self.obj.xAxisFlux, flux, 0, where=(flux > 0), color='gold', alpha=0.75)
+                axs[index].set_title(f'z={round(lowest_redshift, d)}')
+                self.plot_peaks(flux, self.obj.xAxisFlux, axs[index])
+            
+            # Save the file and show
+            if savefile != None:
+                fig.savefig(f'{savefile}', dpi=200)
+            plt.show()
     
     def plot_hist_chi2(self, savefile=None):
-        
-        # Setup the figure and axes
-        fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharey=True, squeeze=self.squeeze)
-        fig.supxlabel('$\chi^2$') 
-        fig.supylabel('Count (#)')
-        axs = axs.flatten()
+        ''' Plot a histogram of the chi-squared at every coordinate
 
+        Parameters
+        ----------
+        savefile : str, None, optional
+            The filename of the saved figure. Default = None
+        '''
         # Initialise return arrays
         all_std = []
         all_mean = []
+
+        # Split data into pages
+        allChi2 = np.array_split(self.obj.allChi2, self.pages)
+        colours = np.array_split(self.obj.plotColours, self.pages)
         
-        # Plot the reduced chi-squared histogram(s)
-        for index, chi2 in enumerate(self.obj.allChi2):
-            reduced_chi2 = np.array(chi2)/(len(chi2)-1)
-            axs[index].hist(reduced_chi2, 20, color=self.obj.plotColours[index])
-            axs[index].invert_xaxis()
-            axs[index].set_yscale('log')
+        # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
+        for page, color in zip(allChi2, colours):
 
-            # Calculate the mean and standard deviation of each bin
-            mean = binned_statistic(reduced_chi2, reduced_chi2, 'mean', 20)
-            std = binned_statistic(reduced_chi2, reduced_chi2, 'std', 20)
+            # Setup the figure and axes
+            fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharey=True, squeeze=self.squeeze)
+            fig.supxlabel('$\chi^2$') 
+            fig.supylabel('Count (#)')
+            axs = axs.flatten()
 
-            # Flip the arrays to be read left to right and append to the return arrays
-            all_mean.append(np.flip(mean[0]))
-            all_std.append(np.flip(std[0]))
+            for index, (chi2, c) in enumerate(zip(page, color)):
+                reduced_chi2 = np.array(chi2)/(len(chi2)-1)
+                axs[index].hist(reduced_chi2, 20, color=c)
+                axs[index].set_yscale('log')
 
-        # Save the file and show
-        if savefile != None:
-            fig.savefig(f'{savefile}', dpi=200)
-        plt.show()
+                # Calculate the mean and standard deviation of each bin
+                mean = binned_statistic(reduced_chi2, reduced_chi2, 'mean', 20)
+                std = binned_statistic(reduced_chi2, reduced_chi2, 'std', 20)
+
+                # Flip the arrays to be read left to right and append to the return arrays
+                all_mean.append(np.flip(mean[0]))
+                all_std.append(np.flip(std[0]))
+
+            # Save the file and show
+            if savefile != None:
+                fig.savefig(f'{savefile}', dpi=200)
+            plt.show()
 
         return all_mean, all_std
 
-    def plot_hist_snr(self, savefile=None):
+    def plot_snr_scale(self, savefile=None):
+        ''' Plot a hsitogram of the snr and scale
 
-        snrs_scales = flatten_list(self.obj.allSNR_scales)
+        Parameters
+        ----------
+        savefile : str, None, optional
+            The filename of the saved figure. Default = None
+        '''
+        snrs = flatten_list(self.obj.allSnrs)
+        scales = flatten_list(self.obj.allScales)
 
         # Setup the figure and axes
-        fig, axs = plt.subplots()
-        fig.supxlabel('SNR/Scale Ratio') 
+        fig, (ax_snr, ax_scale) = plt.subplots(1, 2, sharey=True)
         fig.supylabel('Count (#)')
-        print(snrs_scales)
 
-        # Plot the reduced chi-squared histogram(s)
-        axs.hist(snrs_scales, 20)
-        axs.invert_xaxis()
-        
+        # Plot the snrs histogram(s)
+        ax_snr.hist(snrs, 20)
+        ax_snr.set_title('SNR histogram')
+        ax_snr.set_xlabel('SNR')
+
+        # Plot the scales histogram
+        ax_scale.hist(scales, [8,10,12,14,16,18,20])
+        ax_scale.set_title('Scales Histogram')
+        ax_scale.set_xlabel('Scale')
+
         # Save the file and show
         if savefile != None:
             fig.savefig(f'{savefile}', dpi=200)
@@ -459,7 +655,7 @@ if __name__ == '__main__':
     dec = [2, 24, 0.6, 1] # Declination (d, m, s, sign)
     aperture_radius = 3 # Aperture Radius (pixels)
     bvalue = 3 # BMAJ & BMIN (arcseconds)
-    min_sep = 5 # Minimum separation between points (pixels)
+    min_sep = 1 # Minimum separation between points (pixels)
     num_plots = 1 # Number of plots to make (must be a multiple of 5 or 1)
     circle_radius = 87 # Radius of the largest frequency (pixels)
     ftransition = 115.2712 # the first transition in GHz
@@ -476,3 +672,4 @@ if __name__ == '__main__':
     zf1.plot_flux() 
     zf1.plot_chi2()
     zf1.plot_hist_chi2()
+    zf1.plot_snr_scale()
