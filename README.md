@@ -1,4 +1,4 @@
-# ICRAR-Monster-Black-Holes
+# Redshift Finding Algorithm 
 ICRAR summer studentship project "Monster Black Holes at The Dawn of Time"
 
 <h1 align="left">
