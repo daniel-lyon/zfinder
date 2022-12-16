@@ -1,5 +1,4 @@
 # Redshift Finding Algorithm
-----------------------------
 
 <h1 align="left">
   <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/icrar_logo.png" width="111">
