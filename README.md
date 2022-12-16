@@ -1,5 +1,5 @@
 <h1 align="center">
-<img src="https://en.wikipedia.org/wiki/Redshift#/media/File:Redshift.svg">
+<img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/redshift.png">
 </h1>
 
 # ICRAR-Monster-Black-Holes
