@@ -12,5 +12,5 @@ Example Usage
 -------------
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Figures/0856_flux.png" width="111">
+  <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Figures/0856_flux.png">
 </h1>
