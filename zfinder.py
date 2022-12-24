@@ -17,6 +17,7 @@ from scipy.stats import binned_statistic
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
+# TODO: Move outside functions to their own util/functions file ?
 def average_zeroes(data: list):
     ''' Take the average of adjacent points (left and right) if the value is zero.
 
@@ -52,7 +53,7 @@ def count_decimals(number: float):
     d = abs(d.as_tuple().exponent)
     return d
 
-def flatten_list(input_list):
+def flatten_list(input_list: list):
     ''' Turns lists of lists into a single list
 
     Parameters
@@ -72,10 +73,11 @@ def flatten_list(input_list):
     return flattened_list
 
 class RedshiftFinder(object):
-    def __init__(self, image, right_ascension, declination, aperture_radius, bvalue, 
-            num_plots=1, minimum_point_distance=1, circle_radius=50, warnings=False):
+    def __init__(self, image: str, right_ascension: list, declination: list, aperture_radius: float,
+            bvalue: float, num_plots=1, minimum_point_distance=1.0, circle_radius=50.0, warnings=False):
 
-        # TODO: make circle_radius automatic
+        # TODO: Make circle_radius automatic ?
+        # TODO: Make use of *args and **kwargs ?
 
         '''
         `RedshiftFinder` looks at transition lines and attempts to find the best fitting red shift.
@@ -107,16 +109,16 @@ class RedshiftFinder(object):
             The number  of random points to work with and plot. Default=1
         
         minimum_point_distance : `float`, optional
-            The distance between random points in pixels. Defaul=1
+            The distance between random points in pixels. Defaul=1.0
         
         circle_radius : `float`, optional
-            The smallest radius of the .fits image. Default=50
+            The smallest radius of the .fits image. Default=50.0
 
         warnings : `bool`, optional
             Optional setting to display warnings or not. If True, warnings are displayed.
             Default=False
-
         '''
+
         # Main data
         self.image = fits.open(image)
         self.hdr = self.image[0].header
@@ -162,12 +164,13 @@ class RedshiftFinder(object):
         
         Returns
         -------
-        xcor : `int`
+        x : `int`
             The transformed ra to world coordinate
         
-        ycor : `int`
+        y : `int`
             The transformed dec to world coordinate
         '''
+
         w = WCS(hdr) # Get the world coordinate system
     
         # If there are more than 2 axis, drop them
@@ -183,8 +186,8 @@ class RedshiftFinder(object):
         x, y = w.all_world2pix(ra, dec, 1)
 
         # Round to nearest integer
-        x = np.round(x)
-        y = np.round(y)
+        x = int(np.round(x))
+        y = int(np.round(y))
 
         return x, y
     
@@ -211,6 +214,7 @@ class RedshiftFinder(object):
         points: `list`
             A list of points containing x, y coordinates.
         '''
+
         # centre_coords = [x,y] -> points = [[x,y]]
         points = [centre_coords]
         
@@ -238,6 +242,9 @@ class RedshiftFinder(object):
     
     @staticmethod
     def gaussf(x, a, s, x0):
+
+        # TODO: *args for number of gaussian functions?
+
         ''' Gaussian function used to fit to a data set
 
         Parameters
@@ -259,6 +266,7 @@ class RedshiftFinder(object):
         y : `list`
             the corresponding y-axis 
         '''
+
         y = 0
         for i in range(1,12):
             y += (a * np.exp(-((x-i*x0) / s)**2)) # i = 1,2,3 ... 9, 10
@@ -280,6 +288,7 @@ class RedshiftFinder(object):
         uncertainties : 'numpy.ndarray'
             A numpy array of uncertainties at every frequency
         '''
+
         # Initialise array of fluxes and uncertainties to be returned
         fluxes = np.array([])
         uncertainties = np.array([])
@@ -310,6 +319,9 @@ class RedshiftFinder(object):
         return fluxes, uncertainties      
 
     def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
+
+        # TODO: change 'x-axis to GHz' to detect the unit prefix ?
+
         ''' For every point in coordinates, find the flux and uncertainty. Then find the significant
         lines with the line finder. For each point, iterate through all redshift values and calculate
         the chi-squared that corresponds to that redshift by fitting gaussians to overlay the flux. If
@@ -334,8 +346,8 @@ class RedshiftFinder(object):
         -------
         self.all_lowest_z : list
             A list of the lowest measured redshift values with length equal to the number of points.
-        
         '''
+        
         # Object values
         self.dz = dz
         self.ftransition = ftransition 
@@ -461,6 +473,11 @@ class RedshiftFinder(object):
 
 class zf_plotter(RedshiftFinder):
     def __init__(self, obj, plots_per_page=25):
+
+        # TODO: Add number of rows (or maybe columns instead?) to automatically calculate plots per page
+        # TODO: Use np.ceil instead of checking if pages == 0
+        # TODO: Change saving to work for multiple pages
+
         ''' `zf_plotter` takes a `RedshiftFinder` object as an input to easily compute plots
         used for statistical analysis.
         '''
@@ -498,6 +515,7 @@ class zf_plotter(RedshiftFinder):
         plot_type : 'matplotlib.axes._subplots.AxesSubplot'
             : The figure to plot the peaks on 
         '''
+
         s = Spectrum(y_axis)
         s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
         peaks = s.channel_peaks
@@ -520,6 +538,7 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
+
         circle_points = np.transpose(self.obj.coordinates)
         points_x = circle_points[0, :] # all x coordinates except the first which is the original
         points_y = circle_points[1, :] # all y coordinates except the first which is the original
@@ -546,6 +565,7 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
+
         all_chi2 = np.array_split(self.obj.all_chi2, self.pages)
         AllColours = np.array_split(self.obj.plot_colours, self.pages)
         AllCoords = np.array_split(self.obj.coordinates, self.pages)
@@ -574,6 +594,9 @@ class zf_plotter(RedshiftFinder):
             plt.show()
 
     def plot_flux(self, savefile=None):
+
+        # TODO: Change outside boarder colour to use all_colours
+
         ''' Plot the flux vs frequency at every coordinate
 
         Parameters
@@ -581,6 +604,7 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
+
         # Split data into pages
         all_chi2 = np.array_split(self.obj.all_chi2, self.pages)
         all_flux = np.array_split(self.obj.all_flux, self.pages)
@@ -622,6 +646,7 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
+
         # Initialise return arrays
         all_std = []
         all_mean = []
@@ -659,7 +684,7 @@ class zf_plotter(RedshiftFinder):
 
         return all_mean, all_std
 
-    def plot_snr_scale(self, savefile=None):
+    def plot_snr_scales(self, savefile=None):
         ''' Plot a hsitogram of the snr and scale
 
         Parameters
@@ -667,6 +692,7 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
+
         snrs = flatten_list(self.obj.all_snrs)
         scales = flatten_list(self.obj.all_scales)
 
@@ -712,4 +738,4 @@ if __name__ == '__main__':
     zf1.plot_flux()
     zf1.plot_chi2()
     zf1.plot_hist_chi2()
-    zf1.plot_snr_scale()
+    zf1.plot_snr_scales()
