@@ -72,7 +72,11 @@ def flatten_list(input_list):
     return flattened_list
 
 class RedshiftFinder(object):
-    def __init__(self, image, right_ascension, declination, aperture_radius, bvalue, warnings=False):
+    def __init__(self, image, right_ascension, declination, aperture_radius, bvalue, 
+            num_plots=1, minimum_point_distance=1, circle_radius=50, warnings=False):
+
+        # TODO: make circle_radius automatic
+
         '''
         `RedshiftFinder` looks at transition lines and attempts to find the best fitting red shift.
         This operates by plotting gaussian functions over the data and calculating the chi-squared
@@ -98,7 +102,16 @@ class RedshiftFinder(object):
 
         bvalue : 'float`
             The value of the BMAJ and BMIN vaues
+
+        num_plots : `int`, optional
+            The number  of random points to work with and plot. Default=1
         
+        minimum_point_distance : `float`, optional
+            The distance between random points in pixels. Defaul=1
+        
+        circle_radius : `float`, optional
+            The smallest radius of the .fits image. Default=50
+
         warnings : `bool`, optional
             Optional setting to display warnings or not. If True, warnings are displayed.
             Default=False
@@ -111,6 +124,9 @@ class RedshiftFinder(object):
         self.ra = right_ascension
         self.dec = declination
         self.aperture_radius = aperture_radius
+        self.minimum_point_distance = minimum_point_distance
+        self.num_plots = num_plots
+        self.circle_radius = circle_radius
 
         # The area of the beam
         bmaj = bvalue/3600
@@ -129,7 +145,7 @@ class RedshiftFinder(object):
     @staticmethod
     def wcs2pix(ra: list, dec: list, hdr):
 
-        # TODO: does x and y need to be integers? Try floats
+        # TODO: rounded x and y values are different to non rounded versions?
 
         ''' Convert right ascension and declination to x, y positional world coordinates
 
@@ -167,28 +183,28 @@ class RedshiftFinder(object):
         x, y = w.all_world2pix(ra, dec, 1)
 
         # Round to nearest integer
-        xcor = np.round(x)
-        ycor = np.round(y)
+        x = np.round(x)
+        y = np.round(y)
 
-        return xcor, ycor
+        return x, y
     
     @staticmethod
-    def spaced_circle_points(num_points=1, circle_radius=50, centre_coords=[0,0], minimum_spread_distance=1):
+    def spaced_circle_points(num_points, circle_radius, centre_coords, minimum_spread_distance):
         ''' Generate points in a circle that are a minimum distance a part
 
         Parameters
         ----------
-        num_points : `int`, optional
+        num_points : `int`
             The number of points to plot. Defaults to 1
         
-        circle_radius : `float`, optional
+        circle_radius : `float`
             The radius in which points can be plotted around the centre. Defaults to 50
         
-        centre_coords : `list`, optional
-            The centre of the circle. Defautls to [0,0]
+        centre_coords : `list`
+            The centre of the circle.
         
-        minimum_spread_distance : `float`, optional
-            The minimum distance between points. Defaults to 1.
+        minimum_spread_distance : `float`
+            The minimum distance between points.
         
         Returns
         -------
@@ -291,22 +307,7 @@ class RedshiftFinder(object):
             fluxes = np.append(fluxes, total_flux)
             uncertainties = np.append(uncertainties, rms)
 
-        return fluxes, uncertainties
-
-    def circle_point_vars(self, minimum_point_distance=1, num_plots=1, circle_radius=50):
-
-        # TODO: come up with away to remove this function entirely
-
-        ''' Values for the user to specify about the circular points called by 'spaced_circle_points' '''
-
-        self.centre_x, self.centre_y = self.wcs2pix(self.ra, self.dec, self.hdr)
-        self.plotColours = []
-        self.minimum_point_distance = minimum_point_distance
-        self.num_plots = num_plots
-        if self.num_plots < 4 and self.num_plots > 1:
-            raise ValueError('num_plots must be >= 5 or num_plots == 1')
-        self.circle_radius = circle_radius
-        self.points = [self.centre_x, self.centre_y]
+        return fluxes, uncertainties      
 
     def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
         ''' For every point in coordinates, find the flux and uncertainty. Then find the significant
@@ -331,26 +332,27 @@ class RedshiftFinder(object):
         
         Returns
         -------
-        self.allLowestZ : list
-            A list of the lowest measured redshift values with lenght equal to the number of points.
+        self.all_lowest_z : list
+            A list of the lowest measured redshift values with length equal to the number of points.
         
         '''
         # Object values
-
-        # TODO: change variables to be all_{name}
-
         self.dz = dz
         self.ftransition = ftransition 
-        self.allChi2 = []
-        self.allFlux = []
-        self.allParams = []
-        self.allSnrs = []
-        self.allScales = []
-        self.allLowestZ = []
+        self.all_chi2 = []
+        self.all_flux = []
+        self.all_params = []
+        self.all_snrs = []
+        self.all_scales = []
+        self.all_lowest_z = []
+        self.plot_colours = []
+
+        # Setup for spaced random points
+        self.centre_x, self.centre_y = self.wcs2pix(self.ra, self.dec, self.hdr) 
 
         # Generate the random coordinates for statistical analysis
         self.coordinates = self.spaced_circle_points(self.num_plots, self.circle_radius, 
-            centre_coords=self.points, minimum_spread_distance=self.minimum_point_distance)
+            centre_coords=[self.centre_x, self.centre_y], minimum_spread_distance=self.minimum_point_distance)
         
         # Convert the x-axis to GHz
         freq_start = self.hdr['CRVAL3']/10**9 # GHz
@@ -373,7 +375,7 @@ class RedshiftFinder(object):
 
             # Get fluxes and uncertainties at each point
             y_flux, uncert = self.fits_flux(coord)
-            self.allFlux.append(y_flux)
+            self.all_flux.append(y_flux)
 
             uncert = average_zeroes(uncert) # average 0's from values left & right
             y_flux *= 1000; uncert *= 1000 # convert from uJy to mJy
@@ -430,32 +432,32 @@ class RedshiftFinder(object):
             # Find the colours to map to each chi2
             min_plot_chi2 = min(chi2_array)
             if index == 0:
-                self.plotColours.append('black') # the original
+                self.plot_colours.append('black') # the original
                 target_chi2 = min_plot_chi2
             elif min_plot_chi2 <= target_chi2:
-                self.plotColours.append('red') # if chi2 lower than original
+                self.plot_colours.append('red') # if chi2 lower than original
             elif min_plot_chi2 > target_chi2 and min_plot_chi2 <= 1.05*target_chi2:
-                self.plotColours.append('gold') # if chi2 within 5% above the original
+                self.plot_colours.append('gold') # if chi2 within 5% above the original
             else:
-                self.plotColours.append('green') # if chi2 more than 5% above the original
+                self.plot_colours.append('green') # if chi2 more than 5% above the original
 
             # Find the lowest redshift of each source point
             lowest_index = np.argmin(chi2_array)
             lowest_redshift = self.z[lowest_index]
             
             # Append parameters for use later
-            self.allChi2.append(chi2_array)
-            self.allParams.append(param_array)
-            self.allSnrs.append(snrs)
-            self.allScales.append(scales)
-            self.allLowestZ.append(lowest_redshift)
+            self.all_chi2.append(chi2_array)
+            self.all_params.append(param_array)
+            self.all_snrs.append(snrs)
+            self.all_scales.append(scales)
+            self.all_lowest_z.append(lowest_redshift)
 
             print(f'{index+1}/{len(self.coordinates)} completed..')
 
         # Return an array with the lowest redshift from each source
         end = time()
         print(f'Data processed in {round((end-start)/60, 3)} minutes')
-        return self.allLowestZ
+        return self.all_lowest_z
 
 class zf_plotter(RedshiftFinder):
     def __init__(self, obj, plots_per_page=25):
@@ -527,7 +529,7 @@ class zf_plotter(RedshiftFinder):
         fig.set_figheight(7)
         ax.add_patch(circ)
         plt.title('Distribution of spaced random points')
-        plt.scatter(points_x, points_y, color=self.obj.plotColours)
+        plt.scatter(points_x, points_y, color=self.obj.plot_colours)
         plt.xlim(-self.obj.circle_radius-1+self.obj.centre_x, self.obj.circle_radius+1+self.obj.centre_x)
         plt.ylim(-self.obj.circle_radius-1+self.obj.centre_y, self.obj.circle_radius+1+self.obj.centre_y)
         plt.xlabel('x')
@@ -544,12 +546,12 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
-        allChi2 = np.array_split(self.obj.allChi2, self.pages)
-        AllColours = np.array_split(self.obj.plotColours, self.pages)
+        all_chi2 = np.array_split(self.obj.all_chi2, self.pages)
+        AllColours = np.array_split(self.obj.plot_colours, self.pages)
         AllCoords = np.array_split(self.obj.coordinates, self.pages)
         
         # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
-        for chi2, colours, coordinates in zip(allChi2, AllColours, AllCoords):
+        for chi2, colours, coordinates in zip(all_chi2, AllColours, AllCoords):
 
             # Setup the figure and axes
             fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharex=True, squeeze=self.squeeze)
@@ -580,13 +582,13 @@ class zf_plotter(RedshiftFinder):
             The filename of the saved figure. Default = None
         '''
         # Split data into pages
-        allChi2 = np.array_split(self.obj.allChi2, self.pages)
-        allFlux = np.array_split(self.obj.allFlux, self.pages)
-        AllParams = np.array_split(self.obj.allParams, self.pages)
+        all_chi2 = np.array_split(self.obj.all_chi2, self.pages)
+        all_flux = np.array_split(self.obj.all_flux, self.pages)
+        all_params = np.array_split(self.obj.all_params, self.pages)
         d = count_decimals(self.obj.dz) # decimal places to round to
 
         # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
-        for fluxes, chi2, params in zip(allFlux, allChi2, AllParams):
+        for fluxes, chi2, params in zip(all_flux, all_chi2, all_params):
 
             # Setup the figure and axes
             fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, 
@@ -625,11 +627,11 @@ class zf_plotter(RedshiftFinder):
         all_mean = []
 
         # Split data into pages
-        allChi2 = np.array_split(self.obj.allChi2, self.pages)
-        colours = np.array_split(self.obj.plotColours, self.pages)
+        all_chi2 = np.array_split(self.obj.all_chi2, self.pages)
+        colours = np.array_split(self.obj.plot_colours, self.pages)
         
         # Plot the reduced chi-squared histogram(s) across multiple pages (if more than one)
-        for page, color in zip(allChi2, colours):
+        for page, color in zip(all_chi2, colours):
 
             # Setup the figure and axes
             fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, sharey=True, squeeze=self.squeeze)
@@ -665,8 +667,8 @@ class zf_plotter(RedshiftFinder):
         savefile : `str`, None, optional
             The filename of the saved figure. Default = None
         '''
-        snrs = flatten_list(self.obj.allSnrs)
-        scales = flatten_list(self.obj.allScales)
+        snrs = flatten_list(self.obj.all_snrs)
+        scales = flatten_list(self.obj.all_scales)
 
         # Setup the figure and axes
         fig, (ax_snr, ax_scale) = plt.subplots(1, 2, sharey=True)
@@ -694,16 +696,15 @@ if __name__ == '__main__':
     dec = [2, 24, 0.6, 1] # Declination (d, m, s, sign)
     aperture_radius = 3 # Aperture Radius (pixels)
     bvalue = 3 # BMAJ & BMIN (arcseconds)
-    min_sep = 1 # Minimum separation between points (pixels)
     num_plots = 1 # Number of plots to make (must be a multiple of 5 or 1)
+    min_sep = 1 # Minimum separation between points (pixels)
     circle_radius = 87 # Radius of the largest frequency (pixels)
     ftransition = 115.2712 # the first transition in GHz
     z_start = 0 # initial redshift
     dz = 0.01 # change in redshift
     z_end = 10 # final redshift
 
-    zfind1 = RedshiftFinder(image, ra, dec, aperture_radius, bvalue)
-    zfind1.circle_point_vars(min_sep, num_plots, circle_radius)
+    zfind1 = RedshiftFinder(image, ra, dec, aperture_radius, bvalue, num_plots, min_sep, circle_radius)
     zfind1.zfind(ftransition, z_start, dz, z_end)
 
     zf1 = zf_plotter(zfind1)
