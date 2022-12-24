@@ -4,7 +4,7 @@
   <img src="https://github.com/daniel-lyon/zfinder/blob/main/Affiliations/zfinder-logo.png">
 </h1>
 
-<h1 align="left">
+<h1 align="center">
   <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/icrar_logo.png" width="111">
   <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/redshift.png" width="550">
   <img src="https://github.com/daniel-lyon/ICRAR-Monster-Black-Holes/blob/main/Affiliations/qut_logo.jpg" width="111">
