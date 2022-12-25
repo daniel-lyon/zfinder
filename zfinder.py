@@ -76,7 +76,7 @@ class RedshiftFinder(object):
     def __init__(self, image: str, right_ascension: list, declination: list, aperture_radius: float,
             bvalue: float, num_plots=1, minimum_point_distance=1.0, circle_radius=50.0, warnings=False):
 
-        # TODO: Make circle_radius automatic ?
+        # TODO: Make circle_radius automatic
         # TODO: Make use of *args and **kwargs ?
 
         '''
@@ -106,17 +106,17 @@ class RedshiftFinder(object):
             The value of the BMAJ and BMIN vaues
 
         num_plots : `int`, optional
-            The number  of random points to work with and plot. Default=1
+            The number  of random points to work with and plot. Default = 1
         
         minimum_point_distance : `float`, optional
-            The distance between random points in pixels. Defaul=1.0
+            The distance between random points in pixels. Default = 1.0
         
         circle_radius : `float`, optional
-            The smallest radius of the .fits image. Default=50.0
+            The smallest radius of the .fits image. Default = 50.0
 
         warnings : `bool`, optional
             Optional setting to display warnings or not. If True, warnings are displayed.
-            Default=False
+            Default = False
         '''
 
         # Main data
@@ -129,6 +129,15 @@ class RedshiftFinder(object):
         self.minimum_point_distance = minimum_point_distance
         self.num_plots = num_plots
         self.circle_radius = circle_radius
+
+        # Initialise Lists
+        self.all_chi2 = []
+        self.all_flux = []
+        self.all_params = []
+        self.all_snrs = []
+        self.all_scales = []
+        self.all_lowest_z = []
+        self.plot_colours = []
 
         # The area of the beam
         bmaj = bvalue/3600
@@ -268,7 +277,7 @@ class RedshiftFinder(object):
         '''
 
         y = 0
-        for i in range(1,12):
+        for i in range(1,21):
             y += (a * np.exp(-((x-i*x0) / s)**2)) # i = 1,2,3 ... 9, 10
         return y
     
@@ -320,7 +329,11 @@ class RedshiftFinder(object):
 
     def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
 
-        # TODO: change 'x-axis to GHz' to detect the unit prefix ?
+        # TODO: Change 'x-axis to GHz' to detect the unit prefix
+        # TODO: Break function up into smaller functions?
+            # 1) Convert 'x-axis to GHz' to its own function
+            # 2) Convert Spectrum code to its own function?
+            # 3) Change plot colours section to its own function?
 
         ''' For every point in coordinates, find the flux and uncertainty. Then find the significant
         lines with the line finder. For each point, iterate through all redshift values and calculate
@@ -351,13 +364,6 @@ class RedshiftFinder(object):
         # Object values
         self.dz = dz
         self.ftransition = ftransition 
-        self.all_chi2 = []
-        self.all_flux = []
-        self.all_params = []
-        self.all_snrs = []
-        self.all_scales = []
-        self.all_lowest_z = []
-        self.plot_colours = []
 
         # Setup for spaced random points
         self.centre_x, self.centre_y = self.wcs2pix(self.ra, self.dec, self.hdr) 
@@ -374,7 +380,7 @@ class RedshiftFinder(object):
         self.xAxisFlux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
 
         # Create the redshift values to iterate through
-        self.z = np.arange(z_start, z_end+dz, dz) # number of redshifts to iterate through
+        self.z = np.arange(z_start, z_end+dz, dz)
 
         start = time() # Measure how long it takes to execute 
 
@@ -387,8 +393,6 @@ class RedshiftFinder(object):
 
             # Get fluxes and uncertainties at each point
             y_flux, uncert = self.fits_flux(coord)
-            self.all_flux.append(y_flux)
-
             uncert = average_zeroes(uncert) # average 0's from values left & right
             y_flux *= 1000; uncert *= 1000 # convert from uJy to mJy
             
@@ -458,6 +462,7 @@ class RedshiftFinder(object):
             lowest_redshift = self.z[lowest_index]
             
             # Append parameters for use later
+            self.all_flux.append(y_flux)
             self.all_chi2.append(chi2_array)
             self.all_params.append(param_array)
             self.all_snrs.append(snrs)
@@ -502,6 +507,9 @@ class zf_plotter(RedshiftFinder):
         
     @staticmethod
     def plot_peaks(y_axis, x_axis, plot_type):
+
+        # TODO: Find a way to remove this function? (Combine with other Spectrum function?)
+
         ''' Plot the found peaks of a line finder on top of another plot.
 
         Parameters
@@ -728,7 +736,7 @@ if __name__ == '__main__':
     ftransition = 115.2712 # the first transition in GHz
     z_start = 0 # initial redshift
     dz = 0.01 # change in redshift
-    z_end = 10 # final redshift
+    z_end = 20 # final redshift
 
     zfind1 = RedshiftFinder(image, ra, dec, aperture_radius, bvalue, num_plots, min_sep, circle_radius)
     zfind1.zfind(ftransition, z_start, dz, z_end)
