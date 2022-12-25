@@ -17,7 +17,6 @@ from scipy.stats import binned_statistic
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
-# TODO: Move outside functions to their own util/functions file ?
 def average_zeroes(data: list):
     ''' Take the average of adjacent points (left and right) if the value is zero.
 
@@ -46,8 +45,8 @@ def count_decimals(number: float):
 
     Returns
     -------
-    d : int
-        The count of decimal places
+    d : `int`
+        The number of decimal places
     '''
     d = Decimal(str(number))
     d = abs(d.as_tuple().exponent)
@@ -74,10 +73,10 @@ def flatten_list(input_list: list):
 
 class RedshiftFinder(object):
     def __init__(self, image: str, right_ascension: list, declination: list, aperture_radius: float,
-            bvalue: float, num_plots=1, minimum_point_distance=1.0, circle_radius=50.0, warnings=False):
+            bvalue: float, num_plots=1, minimum_point_distance=1.0, warnings=False):
 
         # TODO: Make circle_radius automatic
-        # TODO: Make use of *args and **kwargs ?
+        # TODO: NumPy nan_to_num ?
 
         '''
         `RedshiftFinder` looks at transition lines and attempts to find the best fitting red shift.
@@ -128,7 +127,7 @@ class RedshiftFinder(object):
         self.aperture_radius = aperture_radius
         self.minimum_point_distance = minimum_point_distance
         self.num_plots = num_plots
-        self.circle_radius = circle_radius
+        self.circle_radius = self.fits_circle_radius(self.data[-1])
 
         # Initialise Lists
         self.all_chi2 = []
@@ -152,6 +151,33 @@ class RedshiftFinder(object):
             filterwarnings("ignore", module='photutils.background')
             filterwarnings("ignore", module='astropy.wcs.wcs')
             filterwarnings("ignore", module='scipy.optimize')
+    
+    @staticmethod
+    def fits_circle_radius(data):
+        ''' In a fits image, find the radius of the smallest image. This radius is used in
+        The `spaced_circle_points` function as the radius.
+
+        Parameters
+        ----------
+        data : `list`
+            A list of lists corresponding to the smallest sized image in the frequency
+            of a .fits image. AKA: the image with the most nans (usually the last image)
+        
+        Returns
+        -------
+        largest_radius : `int`
+            The radius of the given image
+        '''
+
+        # Assuming the image is a cube with a circle of non-nan values
+        data_len = len(data[0]) # The total length
+        target_row = data[(data_len//2) - 1] # the middle row
+        
+        # The true radius is the total length minus the number of nans
+        nan_count = sum(np.isnan(x) for x in target_row) 
+        radius = data_len - nan_count
+
+        return radius // 2 - 7 # minus 7 as a little buffer
 
     @staticmethod
     def wcs2pix(ra: list, dec: list, hdr):
@@ -201,7 +227,7 @@ class RedshiftFinder(object):
         return x, y
     
     @staticmethod
-    def spaced_circle_points(num_points, circle_radius, centre_coords, minimum_spread_distance):
+    def spaced_circle_points(num_points: int, circle_radius: float, centre_coords: list[float], minimum_spread_distance: float):
         ''' Generate points in a circle that are a minimum distance a part
 
         Parameters
@@ -247,37 +273,41 @@ class RedshiftFinder(object):
                 if min_distance >= minimum_spread_distance or len(points) == 1:
                     points.append([x,y])
                     break
+
         return points
     
     @staticmethod
-    def gaussf(x, a, s, x0):
-
-        # TODO: *args for number of gaussian functions?
+    def gaussf(x, a, s, x0, n):
+        
+        # TODO: add unfixed variable for y0?
 
         ''' Gaussian function used to fit to a data set
 
         Parameters
         ----------
         x : `list`
-            the x-axis list
+            The x-axis list
         
         a : `float`
-            the amplitude of the gaussians
+            The amplitude of the gaussians
         
         s : `float`
-            the standard deviation and width of the gaussians
+            The standard deviation and width of the gaussians
         
         x0 : `float`
-            the x-axis offset
+            The x-axis offset
+
+        n : `int`
+            The number of gaussian functions
         
         Returns
         -------
         y : `list`
-            the corresponding y-axis 
+            A y-axis list of guassians 
         '''
 
         y = 0
-        for i in range(1,21):
+        for i in range(1,n):
             y += (a * np.exp(-((x-i*x0) / s)**2)) # i = 1,2,3 ... 9, 10
         return y
     
@@ -381,6 +411,7 @@ class RedshiftFinder(object):
 
         # Create the redshift values to iterate through
         self.z = np.arange(z_start, z_end+dz, dz)
+        self.num_gaussians = round(z_end - z_start) # the number of guassians to plot
 
         start = time() # Measure how long it takes to execute 
 
@@ -413,14 +444,14 @@ class RedshiftFinder(object):
                 
                 # Determine the best fitting parameters
                 try:
-                    params, covariance = curve_fit(lambda x, a, s: self.gaussf(x, a, s, x0=loc), 
+                    params, covariance = curve_fit(lambda x, a, s: self.gaussf(x, a, s, x0=loc, n=self.num_gaussians), 
                         self.xAxisFlux, y_flux, bounds=[[0, (1/8)], [max(y_flux), (2/3)]], absolute_sigma=True) # best fit
                 except RuntimeError:
                     chi2_array.append(max(chi2_array)) # if no returned parameters, set the chi-squared for this redshift to the maximum
                     continue
                 
                 # Using the best fit parameters, calculate the chi2 corresponding to this redshift {ddz}
-                f_exp = self.gaussf(self.xAxisFlux, a=params[0], s=params[1], x0=loc) # expected function
+                f_exp = self.gaussf(self.xAxisFlux, a=params[0], s=params[1], x0=loc, n=self.num_gaussians) # expected function
                 chi2 = sum(((y_flux - f_exp) / uncert)**2)
 
                 # Find the location of the expected gaussian peaks
@@ -476,14 +507,14 @@ class RedshiftFinder(object):
         print(f'Data processed in {round((end-start)/60, 3)} minutes')
         return self.all_lowest_z
 
-class zf_plotter(RedshiftFinder):
+class RedshiftPlotter(RedshiftFinder):
     def __init__(self, obj, plots_per_page=25):
 
         # TODO: Add number of rows (or maybe columns instead?) to automatically calculate plots per page
         # TODO: Use np.ceil instead of checking if pages == 0
         # TODO: Change saving to work for multiple pages
 
-        ''' `zf_plotter` takes a `RedshiftFinder` object as an input to easily compute plots
+        ''' `RedshiftPlotter` takes a `RedshiftFinder` object as an input to easily compute plots
         used for statistical analysis.
         '''
 
@@ -635,7 +666,7 @@ class zf_plotter(RedshiftFinder):
                 lowest_redshift = self.obj.z[lowest_index]
                 axs[index].plot(self.obj.xAxisFlux, flux, color='black', drawstyle='steps-mid')
                 axs[index].plot(self.obj.xAxisFlux, self.obj.gaussf(self.obj.xAxisFlux, *param[lowest_index], 
-                    x0=self.obj.ftransition/(1+lowest_redshift)), color='red')
+                    x0=self.obj.ftransition/(1+lowest_redshift), n=self.obj.num_gaussians), color='red')
                 axs[index].margins(x=0)
                 axs[index].fill_between(self.obj.xAxisFlux, flux, 0, where=(flux > 0), color='gold', alpha=0.75)
                 axs[index].set_title(f'z={round(lowest_redshift, d)}')
@@ -732,16 +763,15 @@ if __name__ == '__main__':
     bvalue = 3 # BMAJ & BMIN (arcseconds)
     num_plots = 1 # Number of plots to make (must be a multiple of 5 or 1)
     min_sep = 1 # Minimum separation between points (pixels)
-    circle_radius = 87 # Radius of the largest frequency (pixels)
     ftransition = 115.2712 # the first transition in GHz
     z_start = 0 # initial redshift
     dz = 0.01 # change in redshift
-    z_end = 20 # final redshift
+    z_end = 10 # final redshift
 
-    zfind1 = RedshiftFinder(image, ra, dec, aperture_radius, bvalue, num_plots, min_sep, circle_radius)
+    zfind1 = RedshiftFinder(image, ra, dec, aperture_radius, bvalue, num_plots, min_sep)
     zfind1.zfind(ftransition, z_start, dz, z_end)
 
-    zf1 = zf_plotter(zfind1)
+    zf1 = RedshiftPlotter(zfind1)
     zf1.plot_points()
     zf1.plot_flux()
     zf1.plot_chi2()
