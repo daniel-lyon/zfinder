@@ -18,56 +18,23 @@ from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
 def average_zeroes(data: list):
+    ''' Take the average of adjacent points (left and right) if the value is zero'''
 
-    # TODO: NumPy nan_to_num?
-
-    ''' Take the average of adjacent points (left and right) if the value is zero.
-
-    Parameters
-    ----------
-    data : `list`
-        A list of data on which to operate
-
-    Returns
-    -------
-    data : `list`
-        An updated list of data with zeroes averaged
-    '''
     for i, val in enumerate(data):
         if val == 0:
             data[i] = (data[i-1] + data[i+1])/2
     return data
 
 def count_decimals(number: float):
-    ''' count the amount of numbers in the decimal places
+    ''' count the amount of numbers after the decimal place '''
 
-    Parameters
-    ----------
-    number : `float`
-        The given float to count the number of decimal places
-
-    Returns
-    -------
-    d : `int`
-        The number of decimal places
-    '''
     d = Decimal(str(number))
     d = abs(d.as_tuple().exponent)
     return d
 
 def flatten_list(input_list: list):
-    ''' Turns lists of lists into a single list
+    ''' Turns lists of lists into a single list '''
 
-    Parameters
-    ----------
-    input_list : `list`
-        A list of lists to flatten
-
-    Returns
-    -------
-    flattened_list: `list`
-        A flattened list
-    '''
     flattened_list = []
     for array in input_list:
         for x in array:
@@ -77,25 +44,12 @@ def flatten_list(input_list: list):
 def get_eng_exponent(number: float):
     ''' Get the exponent of a number in engineering format. In eng
         format, exponents are multiples of 3. E+0, E+3, E+6, etc.
-        Also returns the symbol for the exponent from -24 to +24
-
-    Parameters
-    ----------
-    number : `float`
-        a number
-    
-    Returns
-    -------
-    exponent : `int`
-        The exponent of the number in engineering format
-    
-    symbol " `str`
-        The uni prefix associated with the exponent
-    '''
+        Also returns the unit prefix symbol for the exponent from
+        -24 to +24 '''
 
     # A dictionary of exponent and unit prefix pairs
     prefix = {-24 : 'y', -21 : 'z', -18 : 'a',-15 : 'f', -12 : 'p',
-        -9 : 'n', -6 : 'mu', -3 : 'm', 3 : 'k', 0 : '', 6 : 'M',
+        -9 : 'n', -6 : 'mu', -3 : 'm', 0 : '', 3 : 'k', 6 : 'M',
         9 : 'G', 12 : 'T', 15 : 'P', 18 : 'E', 21 : 'Z', 24 : 'Y'}
 
     base = np.log10(np.abs(number)) # Log rules to find exponent
@@ -391,12 +345,6 @@ class RedshiftFinder(object):
         return fluxes, uncertainties      
 
     def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
-
-        # TODO: Break function up into smaller functions?
-            # 1) Convert 'x-axis to GHz' to its own function
-            # 2) Convert Spectrum code to its own function?
-            # 3) Change plot colours section to its own function?
-
         ''' For every point in coordinates, find the flux and uncertainty. Then find the significant
         lines with the line finder. For each point, iterate through all redshift values and calculate
         the chi-squared that corresponds to that redshift by fitting gaussians to overlay the flux. If
@@ -440,7 +388,7 @@ class RedshiftFinder(object):
         freq_incr = self.hdr['CDELT3']/10**exponent # {symbol}Hz
         freq_len = np.shape(self.data)[0] # length
         freq_end = freq_start + freq_len * freq_incr # where to stop
-        self.xAxisFlux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
+        self.x_axis_flux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
 
         # Create the redshift values to iterate through
         self.z = np.arange(z_start, z_end+dz, dz)
@@ -478,13 +426,13 @@ class RedshiftFinder(object):
                 # Determine the best fitting parameters
                 try:
                     params, covariance = curve_fit(lambda x, a, s: self.gaussf(x, a, s, x0=loc, n=self.num_gaussians), 
-                        self.xAxisFlux, y_flux, bounds=[[0, (1/8)], [max(y_flux), (2/3)]], absolute_sigma=True) # best fit
+                        self.x_axis_flux, y_flux, bounds=[[0, (1/8)], [max(y_flux), (2/3)]], absolute_sigma=True) # best fit
                 except RuntimeError:
                     chi2_array.append(max(chi2_array)) # if no returned parameters, set the chi-squared for this redshift to the maximum
                     continue
                 
                 # Using the best fit parameters, calculate the chi2 corresponding to this redshift {ddz}
-                f_exp = self.gaussf(self.xAxisFlux, a=params[0], s=params[1], x0=loc, n=self.num_gaussians) # expected function
+                f_exp = self.gaussf(self.x_axis_flux, a=params[0], s=params[1], x0=loc, n=self.num_gaussians) # expected function
                 chi2 = sum(((y_flux - f_exp) / uncert)**2)
 
                 # Find the location of the expected gaussian peaks
@@ -544,7 +492,6 @@ class RedshiftPlotter(RedshiftFinder):
     def __init__(self, obj, plots_per_page=25):
 
         # TODO: Add number of rows (or maybe columns instead?) to automatically calculate plots per page
-        # TODO: Use np.ceil instead of checking if pages == 0
         # TODO: Change saving to work for multiple pages
 
         ''' `RedshiftPlotter` takes a `RedshiftFinder` object as an input to easily compute plots
@@ -573,6 +520,8 @@ class RedshiftPlotter(RedshiftFinder):
     def plot_peaks(y_axis, x_axis, plot_type):
 
         # TODO: Find a way to remove this function? (Combine with other Spectrum function?)
+        # TODO: Fix text plotting of snrs and scales
+        # TODO: Animations for flux's and chi-squared's
 
         ''' Plot the found peaks of a line finder on top of another plot.
 
@@ -697,13 +646,13 @@ class RedshiftPlotter(RedshiftFinder):
             for index, (flux, c2, param) in enumerate(zip(fluxes, chi2, params)):
                 lowest_index = np.argmin(c2)
                 lowest_redshift = self.obj.z[lowest_index]
-                axs[index].plot(self.obj.xAxisFlux, flux, color='black', drawstyle='steps-mid')
-                axs[index].plot(self.obj.xAxisFlux, self.obj.gaussf(self.obj.xAxisFlux, *param[lowest_index], 
+                axs[index].plot(self.obj.x_axis_flux, flux, color='black', drawstyle='steps-mid')
+                axs[index].plot(self.obj.x_axis_flux, self.obj.gaussf(self.obj.x_axis_flux, *param[lowest_index], 
                     x0=self.obj.ftransition/(1+lowest_redshift), n=self.obj.num_gaussians), color='red')
                 axs[index].margins(x=0)
-                axs[index].fill_between(self.obj.xAxisFlux, flux, 0, where=(flux > 0), color='gold', alpha=0.75)
+                axs[index].fill_between(self.obj.x_axis_flux, flux, 0, where=(flux > 0), color='gold', alpha=0.75)
                 axs[index].set_title(f'z={round(lowest_redshift, d)}')
-                self.plot_peaks(flux, self.obj.xAxisFlux, axs[index])
+                self.plot_peaks(flux, self.obj.x_axis_flux, axs[index])
             
             # Save the file and show
             if savefile != None:
