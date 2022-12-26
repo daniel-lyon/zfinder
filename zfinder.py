@@ -18,6 +18,9 @@ from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
 def average_zeroes(data: list):
+
+    # TODO: NumPy nan_to_num?
+
     ''' Take the average of adjacent points (left and right) if the value is zero.
 
     Parameters
@@ -71,12 +74,44 @@ def flatten_list(input_list: list):
             flattened_list.append(x)
     return flattened_list
 
+def get_eng_exponent(number: float):
+    ''' Get the exponent of a number in engineering format. In eng
+        format, exponents are multiples of 3. E+0, E+3, E+6, etc.
+        Also returns the symbol for the exponent from -24 to +24
+
+    Parameters
+    ----------
+    number : `float`
+        a number
+    
+    Returns
+    -------
+    exponent : `int`
+        The exponent of the number in engineering format
+    
+    symbol " `str`
+        The uni prefix associated with the exponent
+    '''
+
+    # A dictionary of exponent and unit prefix pairs
+    prefix = {-24 : 'y', -21 : 'z', -18 : 'a',-15 : 'f', -12 : 'p',
+        -9 : 'n', -6 : 'mu', -3 : 'm', 3 : 'k', 0 : '', 6 : 'M',
+        9 : 'G', 12 : 'T', 15 : 'P', 18 : 'E', 21 : 'Z', 24 : 'Y'}
+
+    base = np.log10(np.abs(number)) # Log rules to find exponent
+    exponent = int(np.floor(base)) # convert to floor integer
+    
+    # Check if the the exponent is a multiple of 3
+    for i in range(3):
+        if (exponent-i) % 3 == 0:
+            
+            # Return the exponent and associated unit prefix
+            symbol = prefix[exponent-i]
+            return exponent-i, symbol
+
 class RedshiftFinder(object):
     def __init__(self, image: str, right_ascension: list, declination: list, aperture_radius: float,
             bvalue: float, num_plots=1, minimum_point_distance=1.0, warnings=False):
-
-        # TODO: Make circle_radius automatic
-        # TODO: NumPy nan_to_num ?
 
         '''
         `RedshiftFinder` looks at transition lines and attempts to find the best fitting red shift.
@@ -109,9 +144,6 @@ class RedshiftFinder(object):
         
         minimum_point_distance : `float`, optional
             The distance between random points in pixels. Default = 1.0
-        
-        circle_radius : `float`, optional
-            The smallest radius of the .fits image. Default = 50.0
 
         warnings : `bool`, optional
             Optional setting to display warnings or not. If True, warnings are displayed.
@@ -153,7 +185,7 @@ class RedshiftFinder(object):
             filterwarnings("ignore", module='scipy.optimize')
     
     @staticmethod
-    def fits_circle_radius(data):
+    def fits_circle_radius(data: np.ndarray[np.ndarray]):
         ''' In a fits image, find the radius of the smallest image. This radius is used in
         The `spaced_circle_points` function as the radius.
 
@@ -175,9 +207,10 @@ class RedshiftFinder(object):
         
         # The true radius is the total length minus the number of nans
         nan_count = sum(np.isnan(x) for x in target_row) 
-        radius = data_len - nan_count
+        diameter = data_len - nan_count
+        radius = (diameter // 2) - 7 # minus 7 as a little buffer
 
-        return radius // 2 - 7 # minus 7 as a little buffer
+        return radius
 
     @staticmethod
     def wcs2pix(ra: list, dec: list, hdr):
@@ -359,7 +392,6 @@ class RedshiftFinder(object):
 
     def zfind(self, ftransition, z_start=0, dz=0.01, z_end=10):
 
-        # TODO: Change 'x-axis to GHz' to detect the unit prefix
         # TODO: Break function up into smaller functions?
             # 1) Convert 'x-axis to GHz' to its own function
             # 2) Convert Spectrum code to its own function?
@@ -403,8 +435,9 @@ class RedshiftFinder(object):
             centre_coords=[self.centre_x, self.centre_y], minimum_spread_distance=self.minimum_point_distance)
         
         # Convert the x-axis to GHz
-        freq_start = self.hdr['CRVAL3']/10**9 # GHz
-        freq_incr = self.hdr['CDELT3']/10**9 # GHz
+        exponent, self.symbol = get_eng_exponent(self.hdr['CRVAL3'])
+        freq_start = self.hdr['CRVAL3']/10**exponent # {symbol}Hz
+        freq_incr = self.hdr['CDELT3']/10**exponent # {symbol}Hz
         freq_len = np.shape(self.data)[0] # length
         freq_end = freq_start + freq_len * freq_incr # where to stop
         self.xAxisFlux = np.linspace(freq_start, freq_end, freq_len) # axis to plot
@@ -656,7 +689,7 @@ class RedshiftPlotter(RedshiftFinder):
             # Setup the figure and axes
             fig, axs = plt.subplots(self.rows, self.cols, tight_layout=True, 
                 sharex=True, sharey=True, squeeze=self.squeeze)
-            fig.supxlabel('Frequency $(GHz)$')
+            fig.supxlabel(f'Frequency $({self.obj.symbol}Hz)$')
             fig.supylabel('Flux $(mJy)$')
             axs = axs.flatten()
 
