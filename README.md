@@ -29,18 +29,18 @@ Methodology
 A three dimensional `.fits` data cube of right ascension (ra), declination (dec), and frequency is required. The target is located at a specific ra and dec and then by iterating through the frequency range, the flux at the target is calculated for every frequency:
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/flux_animation.gif" width="1400">
+  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/flux_animation.gif" width="1000">
 </h1>
 
 To find the redshift of the source, the chi-squared at small changes in redshift is calculated:
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/redshift_animation.gif" width="1400">
+  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/redshift_animation.gif" width="1000">
 </h1>
 
 The minimum chi-squared corresponds to the most likely redshift of the source: z=5.55
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/chi2_animation.gif" width="1400">
+  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Animations/chi2_animation.gif" width="1000">
 </h1>
 
