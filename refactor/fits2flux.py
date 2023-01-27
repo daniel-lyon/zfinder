@@ -88,8 +88,6 @@ class fits2flux(object):
     
     def _calc_beam_area(self):
         """ Caclulate the corrected beam area from Jy/beam to Jy"""
-        # Pixel to degree conversion factor
-        self.pix2deg = self.hdr['CDELT2']
 
         # The area of the beam
         bmaj = self.bvalue/3600
@@ -152,6 +150,7 @@ class fits2flux(object):
             apsum = apphot['aperture_sum'][0]
 
             # Calculate corrected flux
+            self.pix2deg = self.hdr['CDELT2'] # Pixel to degree conversion factor
             total_flux = apsum*(self.pix2deg**2)/barea
 
             # Convert from uJy to mJy

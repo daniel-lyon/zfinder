@@ -1,6 +1,7 @@
 import numpy as np
-from scipy.optimize import curve_fit
 from zflux import zflux, find_lines
+from uncertainty import uncertainty
+from scipy.optimize import curve_fit
 
 def fft(x, y):
     N = 5*len(y) # Number of sample points
@@ -47,11 +48,28 @@ class zfft(zflux):
         params, covars = curve_fit(lambda x, a, c: self._double_damped_sinusoid(x, a, c, z=self.dz, 
             nu=self.frequency[0], f=self.transition), self.ffreq, self.fflux, bounds=[[0.1, 0.1], [max(self.fflux), 2]])
         return params, covars
+    
+    def _param_uncert(self):
+        lowest_index = np.argmin(self.fft_chi2)
+        perr = self.fft_perr[lowest_index]
+        return perr
+    
+    def _z_uncert(self):
+        lowest_index = np.argmin(self.fft_chi2)
+        # num_peaks = self.all_num_peaks[lowest_index]
+        num_peaks = 2 # assume always 2 gaussians
+        reduced_sigma = self.sigma**2 / (len(self.flux) - 2*num_peaks - 1)
+        uncert = uncertainty(self.z, self.fft_chi2, reduced_sigma)
+        neg, pos = uncert.calc_uncert()
+        return neg, pos
 
-    def zfind(self):
+    def zfind(self, sigma=1):
 
         # Initialise return arrays
-        fft_chi2 = []
+        self.fft_chi2 = []
+        self.fft_params = []
+        self.fft_perr = []
+        self.sigma = sigma
         
         # Fourier transform frequency and flux
         self.ffreq, self.fflux = fft(self.frequency, self.flux)
@@ -65,6 +83,7 @@ class zfft(zflux):
             
             # Find the best fitting parameters at this redshift
             params, covars = self._find_params()
+            perr = np.sqrt(np.diag(covars))
 
             # Calulate chi-squared
             fflux_obs = self._double_damped_sinusoid(self.ffreq, *params, z=dz, nu=self.frequency[0], f=self.transition)
@@ -72,9 +91,14 @@ class zfft(zflux):
             chi2 = sum(((self.fflux - fflux_obs)/(1))**2) # chi-squared
             reduced_chi2 = chi2 / (len(fflux_obs) - 2*num_spec_peaks - 1)
 
-            fft_chi2.append(reduced_chi2)
+            self.fft_chi2.append(reduced_chi2)
+            self.fft_params.append(params)
+            self.fft_perr.append(perr)
+
+        neg, pos = self._z_uncert()
+        perr = self._param_uncert()
         
-        return self.z, fft_chi2
+        return self.z, self.fft_chi2, [neg, pos], perr
 
 def main():
     from fits2flux import fits2flux
@@ -91,8 +115,11 @@ def main():
     transition = 115.2712
 
     test = zfft(transition, freq, flux)
-    z, chi2 = test.zfind()
+    z, chi2, z_uncert, perr = test.zfind()
     ffreq, fflux = fft(freq, flux)
+
+    print(z_uncert)
+    print(perr)
 
     plt.plot(ffreq, fflux)
     plt.show()

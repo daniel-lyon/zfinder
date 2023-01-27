@@ -1,6 +1,7 @@
 import numpy as np
 from sslf.sslf import Spectrum
 from scipy.signal import find_peaks
+from uncertainty import uncertainty
 from scipy.optimize import curve_fit
 
 def find_lines(flux):
@@ -89,13 +90,29 @@ class zflux():
         else:
             return 1 # No penalisation found, return factor of 1
 
-    def zfind(self):
+    def _param_uncert(self):
+        lowest_index = np.argmin(self.all_chi2)
+        perr = self.all_perrs[lowest_index]
+        return perr
+    
+    def _z_uncert(self):
+        lowest_index = np.argmin(self.all_chi2)
+        num_peaks = self.all_num_peaks[lowest_index]
+        reduced_sigma = self.sigma**2 / (len(self.flux) - 2*num_peaks - 1)
+        uncert = uncertainty(self.z, self.all_chi2, reduced_sigma)
+        neg, pos = uncert.calc_uncert()
+        return neg, pos
+
+    def zfind(self, sigma=1):
         """ Iterate through small changes in redshift and caclulate the chi-squared at each dz """
 
         # Initialise arrays
         self.all_chi2 = []
+        self.all_params = []
         self.all_num_peaks = []
+        self.all_perrs = []
         self.blind_lines, self.num_blind_lines = find_lines(self.flux)
+        self.sigma = sigma
         
         # Interate through the list of redshifts and calculate the chi-squared
         for dz in self.z:
@@ -105,6 +122,8 @@ class zflux():
 
             # Calculate parameters of gaussian fit
             params, covars = self._find_params()
+
+            perr = np.sqrt(np.diag(covars))
             
             # Calculate the expected flux array
             self.f_exp = self._gaussf(self.frequency, a=params[0], s=params[1], x0=self.loc)
@@ -117,9 +136,14 @@ class zflux():
             reduced_chi2 = self._calc_reduced_chi2() * multiplier
 
             self.all_chi2.append(reduced_chi2)
+            self.all_params.append(params)
             self.all_num_peaks.append(len(self.gauss_peaks))
+            self.all_perrs.append(perr)
         
-        return self.z, self.all_chi2
+        neg, pos = self._z_uncert()
+        perr = self._param_uncert()
+        
+        return self.z, self.all_chi2, [neg, pos], perr
 
 def main():
     import matplotlib.pyplot as plt
@@ -135,8 +159,10 @@ def main():
     flux, uncert = gleam_0856.get_flux()
 
     transition = 115.2712
-    zf = zflux(transition, freq, flux, uncert, dz=0.01)
-    z, chi2 = zf.zfind()
+    zf = zflux(transition, freq, flux, uncert)
+    z, chi2, z_uncert, perr = zf.zfind()
+    print(z_uncert)
+    print(perr)
     plt.plot(z, chi2)
     plt.show()
 
