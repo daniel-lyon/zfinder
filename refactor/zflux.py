@@ -1,7 +1,6 @@
 import numpy as np
 from sslf.sslf import Spectrum
 from scipy.signal import find_peaks
-from uncertainty import uncertainty
 from scipy.optimize import curve_fit
 
 def find_lines(flux):
@@ -14,11 +13,11 @@ def find_lines(flux):
     return spec_peaks, num_spec_peaks
 
 class zflux():
-    def __init__(self, transition, frequency, flux, uncertainty, z_start=0, dz=0.01, z_end=10):
+    def __init__(self, transition, frequency, flux, uncertainty):
         """ 
         Finds the best redshift by fitting gaussian functions overlayed on flux data. The
-        chi-squared is caclulated at every redshift by iterating through dz. The most likely
-        redshift of the source corresponds to the minimum chi-squared.
+        chi-squared is caclulated at every redshift by iterating through delta-z. The most 
+        likely redshift of the source corresponds to the minimum chi-squared.
 
         Parameters
         ----------
@@ -39,13 +38,12 @@ class zflux():
         self.frequency = frequency
         self.flux = flux
         self.uncertainty = uncertainty
-        self.z = np.arange(z_start, z_end+dz, dz)
-
+    
     @staticmethod
     def _gaussf(x, a, s, x0):
-        """ Function to fit a sum of gaussians in a window (x-axis)"""
+        """ Function to fit a sum of gaussians in a window (x-axis) """
         y = 0
-        for i in range(1,11):
+        for i in range(1,30):
             y += (a * np.exp(-((x-i*x0) / s)**2)) # i = 1,2,3 ... 9, 10
         return y
     
@@ -60,9 +58,9 @@ class zflux():
 
         # Caclulate the degrees of freedom
         flux_points = len(self.flux)
-        len_peaks = len(self.gauss_peaks)
-        num_gauss = 2*len_peaks # 2 DoF per gaussian (amp, std)
-        DoF = flux_points - num_gauss - 1
+        num_gauss = len(self.gauss_peaks)
+        gauss_dofs = 2*num_gauss # 2 DoF per gaussian (amp, std)
+        DoF = flux_points - gauss_dofs - 1
 
         # Calculate chi-squared
         chi2 = sum(((self.flux - self.f_exp) / self.uncertainty)**2)
@@ -72,9 +70,9 @@ class zflux():
         return reduced_chi2
     
     def _penalise_chi2(self):
-        """ Penalise chi-squared values that do not fit to lines found with sslf line finder"""
+        """ Penalise chi-squared values that do not fit to lines found with sslf line finder """
 
-        # Variable Settings (Make **kwargs?)
+        # Variable Settings (Make **kwargs??)
         num_gaussians = len(self.gauss_peaks)
         penalising_factor = 1.2
         tolerance = 3
@@ -90,29 +88,42 @@ class zflux():
         else:
             return 1 # No penalisation found, return factor of 1
 
-    def _param_uncert(self):
-        lowest_index = np.argmin(self.all_chi2)
-        perr = self.all_perrs[lowest_index]
-        return perr
-    
-    def _z_uncert(self):
-        lowest_index = np.argmin(self.all_chi2)
-        num_peaks = self.all_num_peaks[lowest_index]
-        reduced_sigma = self.sigma**2 / (len(self.flux) - 2*num_peaks - 1)
-        uncert = uncertainty(self.z, self.all_chi2, reduced_sigma)
-        neg, pos = uncert.calc_uncert()
-        return neg, pos
-
-    def zfind(self, sigma=1):
-        """ Iterate through small changes in redshift and caclulate the chi-squared at each dz """
+    def zfind(self, z_start=0, dz=0.01, z_end=10, sigma=1):
+        """
+        Iterate through small changes in redshift and caclulate the chi-squared at each dz 
+        
+        Parameters
+        ----------
+        z_start : int, optional
+            The beginning of the redshift list. Default = 0
+        
+        dz : float, optional
+            The change in redshift. Default = 0.01
+        
+        z_end : int, optional
+            The final value of the redshift list. Default = 10
+        
+        sigma : float
+            The significance level of the uncertainty in the redshift 
+            found at the minimum chi-squared
+        
+        Returns
+        -------
+        z : list
+            The list of redshifts that was used to calculate the chi-squared
+        
+        chi2 : list
+            A list of calculated chi-squared values
+        """
 
         # Initialise arrays
+        self.z = np.arange(z_start, z_end+dz, dz)
+        self.sigma = sigma
         self.all_chi2 = []
         self.all_params = []
         self.all_num_peaks = []
         self.all_perrs = []
         self.blind_lines, self.num_blind_lines = find_lines(self.flux)
-        self.sigma = sigma
         
         # Interate through the list of redshifts and calculate the chi-squared
         for dz in self.z:
@@ -120,15 +131,14 @@ class zflux():
             # Calculate the offset of the gaussians
             self.loc = self.transition/(1+dz)
 
-            # Calculate parameters of gaussian fit
+            # Calculate parameters of gaussian fitS
             params, covars = self._find_params()
-
-            perr = np.sqrt(np.diag(covars))
+            perr = np.sqrt(np.diag(covars)) # Caclulate the error on the gaussian parameters
             
-            # Calculate the expected flux array
+            # Calculate the expected flux array (gaussian overlay)
             self.f_exp = self._gaussf(self.frequency, a=params[0], s=params[1], x0=self.loc)
 
-            # Find the number of gaussians overlayed
+            # Caclulate the number of gaussians overlayed
             self.gauss_peaks = find_peaks(self.f_exp)[0]
 
             # Calculate the reduced chi-squared and check if it should be penalised
@@ -140,10 +150,7 @@ class zflux():
             self.all_num_peaks.append(len(self.gauss_peaks))
             self.all_perrs.append(perr)
         
-        neg, pos = self._z_uncert()
-        perr = self._param_uncert()
-        
-        return self.z, self.all_chi2, [neg, pos], perr
+        return self.z, self.all_chi2
 
 def main():
     import matplotlib.pyplot as plt
@@ -160,9 +167,7 @@ def main():
 
     transition = 115.2712
     zf = zflux(transition, freq, flux, uncert)
-    z, chi2, z_uncert, perr = zf.zfind()
-    print(z_uncert)
-    print(perr)
+    z, chi2 = zf.zfind()
     plt.plot(z, chi2)
     plt.show()
 

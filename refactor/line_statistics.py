@@ -1,6 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
-
 from zflux import zflux
 from random import random
 from astropy.wcs import WCS
@@ -10,6 +8,7 @@ from scipy.spatial.distance import cdist
 from PyAstronomy.pyasl import degToHMS, degToDMS
 
 def line_stats(flux):
+    """ Signal-to-noise ratio and scale resulting from blind line finding """
     s = Spectrum(flux)
     s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
 
@@ -19,7 +18,7 @@ def line_stats(flux):
     return snrs, scales
 
 def flatten_list(input_list: list[list]):
-    ''' Turns lists of lists into a single list '''
+    """ Turns lists of lists into a single list """
     flattened_list = []
     for array in input_list:
         for x in array:
@@ -28,8 +27,8 @@ def flatten_list(input_list: list[list]):
 
 def spaced_circle_points(num_points, circle_radius, centre_coords, minimum_spread_distance):
     """ Calculate points in a circle with a minimum spread """
-    # centre_coords = [x,y] -> points = [[x,y]]
-    points = [centre_coords]
+    
+    points = [centre_coords] # centre_coords = [x,y] -> points = [[x,y]]
     
     # Iterate through the number of points.
     for _ in range(num_points-1):
@@ -58,7 +57,7 @@ def spaced_circle_points(num_points, circle_radius, centre_coords, minimum_sprea
     return points
 
 def pix2wcs(x, y, hdr):
-    """ Convert x,y coordinates to ra, dec"""
+    """ Convert x,y positional coordinates to world ra, dec"""
     # Drop redundant axis
     w = WCS(hdr)
     if hdr['NAXIS'] > 2:
@@ -87,9 +86,8 @@ class line_statistics(fits2flux):
         
         min_spread : float, optional
             The minimum spread distance that must be between every point (pixels)
-            Defualt = 1
+            Default = 1
         """
-
         super().__init__(image, ra, dec, aperture_radius, bvalue)
         self.transition = transition
     
@@ -100,7 +98,31 @@ class line_statistics(fits2flux):
         return super().get_freq()
 
     def perform_analysis(self, num_points, radius=50, min_spread=1):
-        """ Find scales and snr of random points """
+        """ 
+        Find statistics of: signal-to-noise ratio, scale, and delta-z of random points
+        
+        Parameters
+        ----------
+        num_points : int
+            The number of points to find statistics for
+        
+        radius : float, optional
+            The radius of the image to find statistics (in pixels). Default = 50
+        
+        min_spread : float, optional
+            The minimum spread of random points (in pixels). Default = 1
+        
+        Returns
+        -------
+        snrs : list
+            A list of signifcant point signal-to-noise ratios
+        
+        scales : list
+            The scale of the significant points
+        
+        z : list
+            A list of the redshifts corresponding to the minimum chi-squared
+        """
         
         # Initialise return arrays
         all_snrs = []
@@ -121,7 +143,7 @@ class line_statistics(fits2flux):
             snrs, scales = line_stats(flux) # use flux axis to find lines on
 
             zf = zflux(self.transition, freq, flux, unc)
-            z, chi2, z_uncert, perr = zf.zfind()
+            z, chi2 = zf.zfind()
 
             all_snrs.append(snrs)
             all_scales.append(scales)
@@ -139,7 +161,7 @@ def main():
     transition = 115.2712
 
     radius = 50
-    points = 10
+    points = 5
     min_spread = 1
 
     stats = line_statistics(image, ra, dec, apeture_radius, bvalue, transition)
