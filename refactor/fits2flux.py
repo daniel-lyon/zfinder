@@ -193,7 +193,12 @@ def main():
     freq = gleam_0856.get_freq()
     flux, uncert = gleam_0856.get_flux()
 
-    plt.plot(freq, flux)
+    plt.plot(freq, np.zeros(len(freq)), color='black', linestyle=(0, (5, 5)))
+    plt.plot(freq, flux, color='black', drawstyle='steps-mid')
+    plt.margins(x=0)
+    plt.fill_between(freq, flux, 0, where=(np.array(flux) > 0), color='gold', alpha=0.75)
+    plt.xlabel('Frequency $(GHz)$')
+    plt.ylabel('Flux $(mJy)$')
     plt.show()
 
 if __name__ == '__main__':

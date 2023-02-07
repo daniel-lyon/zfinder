@@ -37,19 +37,24 @@ class zfft():
         self.flux = flux
 
     @staticmethod
-    def _double_damped_sinusoid(x, a, c, z, nu, f):
+    def _double_damped_sinusoid(x, a, s, z, nu, f):
         """ FFT Fitting function """
-        N = np.floor(((1+z)*nu/f)+1)
-        p = 2*np.pi*(N*f/(1+z) - nu)
-        q = 2*np.pi*((N+1)*f/(1+z) - nu)
-
-        y = a*c*np.exp(-((x)**2) / (2*c**2)) * (np.cos(p*x) + np.cos(q*x))
+        O = f/(1+z)
+        A = 22.09797605*a*s
+        C = 1/(np.pi*s)
+        N = np.floor(nu/O+1)
+        p = 2*np.pi*(N*O - nu)
+        q = 2*np.pi*((N+1)*O - nu)
+        y = A*np.exp(-(x / C)**2) * (np.cos(p*x) + np.cos(q*x))
         return y
 
     def _find_params(self):
         """ Find the best fitting parameters for the FFT """
-        params, covars = curve_fit(lambda x, a, c: self._double_damped_sinusoid(x, a, c, z=self.dz, 
-            nu=self.frequency[0], f=self.transition), self.ffreq, self.fflux, bounds=[[0.1, 0.1], [max(self.fflux), 2]])
+        try:
+            params, covars = curve_fit(lambda x, a, s: self._double_damped_sinusoid(x, a, s, z=self.dz, 
+                nu=self.x0, f=self.transition), self.ffreq, self.fflux, bounds=[[0, 0], [max(self.fflux), 2]])
+        except:
+            return np.array([None, None]), np.array([None, None])
         return params, covars
     
     def _calc_all_num_gauss(self):
@@ -99,6 +104,7 @@ class zfft():
         
         # Fourier transform frequency and flux
         self.ffreq, self.fflux = fft(self.frequency, self.flux)
+        self.x0 = self.frequency[0]
 
         # Interate through the list of redshifts and calculate the chi-squared
         for dz in self.z:
@@ -106,10 +112,16 @@ class zfft():
             
             # Find the best fitting parameters at this redshift
             params, covars = self._find_params()
+            if not params.tolist()[0]:
+                self.all_chi2.append(max(self.all_chi2))
+                self.fft_params.append([99,99])
+                self.fft_perrs.append([99,99])
+                self.all_num_peaks.append(0)
+                continue
             perr = np.sqrt(np.diag(covars))
 
             # Calulate chi-squared
-            fflux_obs = self._double_damped_sinusoid(self.ffreq, *params, z=dz, nu=self.frequency[0], f=self.transition)
+            fflux_obs = self._double_damped_sinusoid(self.ffreq, *params, z=dz, nu=self.x0, f=self.transition)
 
             gauss_peaks = self._calc_all_num_gauss()
             num_gauss_peaks = len(gauss_peaks)

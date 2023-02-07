@@ -9,11 +9,10 @@ def find_lines(flux):
     s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
     spec_peaks = s.channel_peaks
     spec_peaks = np.sort(spec_peaks) # sort the peaks ascending   
-    num_spec_peaks = len(spec_peaks)
-    return spec_peaks, num_spec_peaks
+    return spec_peaks
 
 class zflux():
-    def __init__(self, transition, frequency, flux, uncertainty):
+    def __init__(self, transition, frequency, flux, uncertainty=1):
         """ 
         Finds the best redshift by fitting gaussian functions overlayed on flux data. The
         chi-squared is caclulated at every redshift by iterating through delta-z. The most 
@@ -31,8 +30,9 @@ class zflux():
         flux : list
             A list of flux values caclulated from fits2flux
 
-        uncertainty : list
-            A list of uncertainty values caclulated from fits2flux
+        uncertainty : list, optional
+            A list of uncertainty values caclulated from fits2flux. Default = 1.
+            If left unset, resulting chi-squared statistics will be relative.
         """
         self.transition = transition
         self.frequency = frequency
@@ -123,7 +123,8 @@ class zflux():
         self.all_params = []
         self.all_num_peaks = []
         self.all_perrs = []
-        self.blind_lines, self.num_blind_lines = find_lines(self.flux)
+        self.blind_lines = find_lines(self.flux)
+        self.num_blind_lines = len(self.blind_lines)
         
         # Interate through the list of redshifts and calculate the chi-squared
         for dz in self.z:

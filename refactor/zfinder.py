@@ -6,10 +6,10 @@ from zflux import zflux
 from zfft import zfft, fft
 from astropy.io import fits
 from decimal import Decimal
-from warnings import filterwarnings
 from uncertainty import z_uncert
+from warnings import filterwarnings
 from fits2flux import fits2flux, wcs2pix, get_eng_exponent
-from line_statistics import line_statistics, line_stats, flatten_list, pix2wcs
+from line_statistics import line_statistics, find_lines, flatten_list, pix2wcs
 
 filterwarnings("ignore", module='astropy.wcs.wcs')
 
@@ -32,8 +32,10 @@ def get_unit(exponent):
 class zfinder():
     def __init__(self, image, ra, dec, transition, aperture_radius, bvalue):
         """
-        Wrapper on zflux, zfft, fits2flux, and line_statistics to create nice plots. If you
-        need to manually create these plots, use the aforementioned functions together.
+        Create plots of flux, chi-squared, redshift velocit. Use zfind_flux for flux redshift finding,
+        zfind_fft for fft redshing finding, line_stats for statistics at random points,
+        and fft_per_pixel to calculate the redshift with the fft method in a grid of
+        pixels.
 
         Parameters
         ----------
@@ -87,6 +89,16 @@ class zfinder():
         ax_redshift.set_title('Redshift Histogram')
         ax_redshift.set_xlabel('$\Delta z$ ')
         plt.show()
+    
+    @staticmethod
+    def _plot_scale_snr_scatter(snr, scale):
+        snr = flatten_list(snr)
+        scale = flatten_list(scale)
+        plt.scatter(snr, scale)
+        plt.xlabel('SNR')
+        plt.ylabel('Scale')
+        plt.savefig('Scale vs SNR.png')
+        plt.show()
 
     @staticmethod
     def _plot_circle_points(coords, radius):
@@ -112,29 +124,28 @@ class zfinder():
         plt.show()
     
     @staticmethod
-    def _heatmap(data, centre_coords):
-        """ Grid heatmap of the redshift found per pixel """
-        coord_array = np.zeros(len(data), dtype=np.int64)
-        for i in range(len(coord_array)):
-            coord_array[i] = i-len(coord_array)//2
-        x_coords = coord_array + centre_coords[0]
-        y_coords = np.abs(coord_array - centre_coords[1])
-        data = [i.tolist() for i in data]
-
-        # Show a heatmap of the redshifts
-        hm = plt.imshow(data, cmap='cool', interpolation='nearest')
-        plt.xticks(np.arange(len(x_coords)), labels=x_coords)
-        plt.yticks(np.arange(len(y_coords)), labels=y_coords)
-        plt.colorbar(hm)
-        for i in range(len(data)):
-            for j in range(len(data)):
-                plt.text(j, i, data[i][j], ha="center", va="center", color='black')
-        plt.savefig('FFT PP Heatmap.png')
+    def _plot_pix_snr_scatter(pixels, snrs):
+        pixels = flatten_list(pixels)
+        snrs = flatten_list(snrs)
+        plt.scatter(pixels, snrs)
+        plt.xlabel('No. of Pixels')
+        plt.ylabel('SNR')
+        plt.yticks([0,1,2,3,4,5,6,7,8,9,10])
+        plt.savefig('#Pix vs SNR.png')
         plt.show()
+
+    @staticmethod
+    def _export_heatmap_csv(delta_z):
+        """ Export matrix of delta redshifts"""
+        with open(f'heatmap_data.csv', 'w') as f:
+            wr = csv.writer(f)
+            for row in delta_z:
+                wr.writerow(row)
+            wr.writerow([])
     
     def _plot_blind_lines(self):
         """ Helper function to plot blind lines in the found flux """
-        snrs, scales = line_stats(self.flux)
+        peaks, snrs, scales = find_lines(self.flux)
         lines = self.zf.blind_lines
         text_offset_high = max(self.flux)/20
         text_offset_low = 0.4*text_offset_high
@@ -145,6 +156,47 @@ class zfinder():
             plt.plot(x, y, 'bo')
             plt.text(x, y+text_offset_high, f'snr={snrs[i]}', color='blue')
             plt.text(x, y+text_offset_low, f'scale={scales[i]}', color='blue')
+
+    def _heatmap(self):
+        """ Grid heatmap of the redshift found per pixel """
+        velocities = [3*10**5*(1/(1+self.best_z) - 1/(1+i)) for i in self.z_fft_pp]
+        coord_array = np.zeros(len(self.z_fft_pp), dtype=np.int64)
+        for i in range(len(coord_array)):
+            coord_array[i] = i-len(coord_array)//2
+        x_coords = coord_array + self.centre_coords[0]
+        y_coords = np.abs(coord_array - self.centre_coords[1])
+        total_coords = []
+        for x, y in zip(x_coords, y_coords):
+            ra, dec = pix2wcs(x,y, self.hdr)
+            total_coords.append([ra, dec])
+        total_coords = np.array(total_coords, dtype=object)
+        x_coords = total_coords[:,0]
+        y_coords = total_coords[:,1]
+        x_coords = [f"{ra[0]}$^h${ra[1]}$^m${round(ra[2],2)}$^s$" for ra in x_coords]
+        y_coords = [f"{dec[0]}\u00b0{dec[1]}\"{round(dec[2],2)}\'" for dec in y_coords]
+        self.z_fft_pp = np.array(self.z_fft_pp).tolist()
+        d = count_decimals(self.best_z)
+
+        # Show a heatmap of the redshifts
+        # hm_r = plt.imshow(velocities, cmap='bwr_r', interpolation='nearest', norm=[1,0])
+        hm = plt.imshow(velocities, cmap='bwr', interpolation='nearest', vmin=-300, vmax=300)
+        plt.xticks(np.arange(len(x_coords)), labels=x_coords, rotation=90, fontsize=5)
+        plt.yticks(np.arange(len(y_coords)), labels=y_coords, fontsize=5)
+        plt.colorbar(hm)
+
+        all_deltas = []
+        for i in range(len(self.z_fft_pp)):
+            deltas = []
+            for j in range(len(self.z_fft_pp)):
+                dat = float(self.z_fft_pp[i][j])
+                delta_z = dat - self.best_z
+                delta_z = round(delta_z, d)
+                deltas.append(delta_z)
+            all_deltas.append(deltas)
+        
+        self._export_heatmap_csv(all_deltas)        
+        plt.savefig('FFT PP Heatmap.png')
+        plt.show()
     
     def _plot_flux(self):
         """ Plot the flux with best fitting redshift """
@@ -160,9 +212,9 @@ class zfinder():
         self._plot_blind_lines()
         plt.margins(x=0)
         plt.fill_between(self.frequency, self.flux, 0, where=(np.array(self.flux) > 0), color='gold', alpha=0.75)
-        plt.title(f'Flux z={round(self.min_z, self.d)}')
-        plt.xlabel(f'Frequency $({symbol}Hz)$')
-        plt.ylabel('Flux $(mJy)$')
+        plt.title(f'Flux z={round(self.min_z, self.d)}', fontsize=15)
+        plt.xlabel(f'Frequency $({symbol}Hz)$', fontsize=15)
+        plt.ylabel('Flux $(mJy)$', fontsize=15)
         plt.savefig('Flux Best Fit.png')
         plt.show()
     
@@ -172,9 +224,9 @@ class zfinder():
         plt.figure(figsize=(20,9))
         plt.plot(z, chi2, color='black')
         plt.plot(self.min_z, self.min_chi2, 'bo', markersize=5)
-        plt.title(f'{title} $\chi^2_r$ = {round(self.min_chi2, 2)} @ z={round(self.min_z, self.d)}')
-        plt.xlabel('Redshift')
-        plt.ylabel('$\chi^2_r$', x=0.01)
+        plt.title(f'{title} $\chi^2_r$ = {round(self.min_chi2, 2)} @ z={round(self.min_z, self.d)}', fontsize=15)
+        plt.xlabel('Redshift', fontsize=15)
+        plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
         plt.yscale('log')
         plt.savefig(f'{title} Chi2.png', dpi=200)
         plt.show()
@@ -189,9 +241,9 @@ class zfinder():
         plt.plot(self.ffreq, zfft._double_damped_sinusoid(self.ffreq, *self.lowest_params, 
             self.dz, self.frequency[0], self.transition), color='red')
         plt.fill_between(self.ffreq, self.fflux, 0, where=(np.array(self.fflux) > 0), color='gold', alpha=0.75)
-        plt.title(f'FFT z={round(self.min_z, self.d)}')
-        plt.xlabel('Scale')
-        plt.ylabel('Amplitude')
+        plt.title(f'FFT z={round(self.min_z, self.d)}', fontsize=15)
+        plt.xlabel('Scale', fontsize=15)
+        plt.ylabel('Amplitude', fontsize=15)
         plt.margins(x=0)
         plt.savefig('FFT Best Fit.png', dpi=200)
         plt.show()
@@ -341,12 +393,14 @@ class zfinder():
         stats = line_statistics(self.image, self.ra, self.dec, 
             self.aperture_radius, self.bvalue, self.transition)
         
-        snrs, scales, lowest_z = stats.perform_analysis(num_points, radius, min_spread)
+        snrs, scales, lowest_z, pixels = stats.perform_analysis(num_points, radius, min_spread)
 
         self._plot_circle_points(stats.coordinates, radius)
         self._plot_snr_scales(snrs, scales, lowest_z)
+        self._plot_scale_snr_scatter(snrs, scales)
+        self._plot_pix_snr_scatter(pixels, snrs)
 
-    def fft_per_pixel(self, length):
+    def fft_per_pixel(self, length, z_start=0, dz=0.001, z_end=10):
         """
         Performs the FFT redshift finding method in a square around the 
         target right ascension and declination. Automatically saves and
@@ -361,37 +415,55 @@ class zfinder():
         """
 
         z_fft_pp = []
+        d = count_decimals(dz)
         
         self.opened_image = fits.open(self.image)
         self.hdr = self.opened_image[0].header
-        centre_coords = wcs2pix(self.ra, self.dec, self.hdr)
+        self.centre_coords = wcs2pix(self.ra, self.dec, self.hdr)
 
+        source = fits2flux(self.image, self.ra, self.dec, self.aperture_radius, self.bvalue)
+        freq = source.get_freq()
+        flux, uncert = source.get_flux()
+        fft_instance = zfft(self.transition, freq, flux)
+        z, chi2 = fft_instance.zfind(z_start, dz, z_end)
+        self.best_z = z[np.argmin(chi2)]
+        self.best_z = round(self.best_z, d)
         if length %2 == 0:
             length += 1
         
-        matrix = np.zeros(length**2)
-
+        matrix = np.zeros(length)
         for i in range(len(matrix)):
             matrix[i] = i-len(matrix)//2
-        x_coords = matrix + centre_coords[0]
-        y_coords = matrix + centre_coords[1]
+        x_coords = matrix + self.centre_coords[0]
+        y_coords = matrix + self.centre_coords[1]
+        from time import time
 
-        for i, (x, y) in enumerate(zip(x_coords, y_coords)):
-            self.ra, self.dec = pix2wcs(x, y, self.hdr)
-            self._run_fits2flux()
+        i = 0
+        for y in reversed(y_coords):
+            for x in x_coords:
+                start = time()
+        
+                ra, dec = pix2wcs(x, y, self.hdr)
+                
+                gleam_0856 = fits2flux(self.image, ra, dec, self.aperture_radius, self.bvalue)
+                freq = gleam_0856.get_freq()
+                flux, uncert = gleam_0856.get_flux()
 
-            zf = zfft(self.transition, self.frequency, self.flux)
-            z, chi2 = zf.zfind()
+                zf = zfft(self.transition, freq, flux)
+                z, chi2 = zf.zfind(z_start, dz, z_end)
 
-            lowest_z = z[np.argmin(chi2)]
+                lowest_z = z[np.argmin(chi2)]
+                lowest_z = round(lowest_z, d)
 
-            z_fft_pp.append(lowest_z)
-            print(f'{i+1}/{len(x_coords)}')
+                z_fft_pp.append(lowest_z)
 
-        z_fft_pp = np.array_split(z_fft_pp, length)
+                end = time()
+                elapsed = end - start
+                print(f'{i+1}/{length**2}, {round(elapsed,2)} seconds')
+                i+=1
 
-        self._heatmap(z_fft_pp, centre_coords)
-
+        self.z_fft_pp = np.array_split(z_fft_pp, length)
+        self._heatmap()
         return z_fft_pp
         
 def main():
@@ -408,8 +480,8 @@ def main():
     gleam_0856 = zfinder(image, ra, dec, transition, aperture_radius, bvalue)
     gleam_0856.zfind_flux(z_start, dz, z_end)
     gleam_0856.zfind_fft(z_start, dz, z_end)
-    gleam_0856.line_stats(num_points=5, radius=5, min_spread=1)
-    gleam_0856.fft_per_pixel(length=3)
+    # gleam_0856.line_stats(num_points=5, radius=5, min_spread=1)
+    # gleam_0856.fft_per_pixel(length=3, z_start=z_start, dz=dz, z_end=z_end)
 
 if __name__ == '__main__':
     main()
