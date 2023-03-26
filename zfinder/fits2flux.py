@@ -264,8 +264,12 @@ class fits2flux(object):
         # Average 0's from values left & right
         f_uncert = average_zeroes(f_uncert) 
         
-        flux = np.array(flux)*1000
-        f_uncert = np.array(f_uncert)*1000
+        # Normalising factor
+        self.yexponent = get_eng_exponent(np.max(flux))
+        norm_factor = 10**-self.yexponent
+
+        flux = np.array(flux)*norm_factor
+        f_uncert = np.array(f_uncert)*norm_factor
         return flux, f_uncert
     
     def random_analysis(self, num_points=100, radius=50, min_spread=1):
@@ -331,17 +335,20 @@ def main():
     # image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
     # ra = [8, 56, 14.8]
     # dec = [2, 24, 0.6, 1]
-    
+
     image = 'SPT_0345-47.contsub.clean.taper.image.fits'
     ra = [3, 45, 10.77]
     dec = [-47, 25, 39.5, -1]
-    
+
     aperture_radius = 3
     bvalue = 3
 
     gleam_0856 = fits2flux(image, ra, dec, aperture_radius, bvalue)
     freq = gleam_0856.get_freq()
     flux, uncert = gleam_0856.get_flux()
+
+    print(flux)
+    print(freq)
 
     plt.plot(freq, np.zeros(len(freq)), color='black', linestyle=(0, (5, 5)))
     plt.plot(freq, flux, color='black', drawstyle='steps-mid')

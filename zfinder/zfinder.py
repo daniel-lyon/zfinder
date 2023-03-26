@@ -24,7 +24,7 @@ def count_decimals(number: float):
     d = abs(d.as_tuple().exponent)
     return d
 
-def flatten_list(input_list: list[list]):
+def flatten_list(input_list):
     """ Turns lists of lists into a single list """
     flattened_list = []
     for array in input_list:
@@ -277,13 +277,6 @@ class zfinder(flux_zfind):
     
     def _plot_flux(self, params):
         """ Plot the flux with best fitting redshift """
-        # Normalising factor
-        self.yexponent = get_eng_exponent(np.average(self.flux))
-        # # print(np.average(flux))
-        # # print(self.yexponent)
-        # norm_factor = 10**-self.yexponent
-        # # print(norm_factor)
-        # # norm_factor = 1
         d = count_decimals(self.dz)
         x0 = self.transition/(1+self.min_z)
         plt.figure(figsize=(20,9))
@@ -295,7 +288,7 @@ class zfinder(flux_zfind):
         plt.fill_between(self.frequency, self.flux, 0, where=(np.array(self.flux) > 0), color='gold', alpha=0.75)
         plt.title(f'Flux z={round(self.min_z, d)}', fontsize=15)
         plt.xlabel(f'Frequency $({prefix[self.source.xexponent]}Hz)$', fontsize=15)
-        plt.ylabel(f'Flux $({prefix[self.yexponent]}Jy)$', fontsize=15)
+        plt.ylabel(f'Flux $({prefix[self.source.yexponent]}Jy)$', fontsize=15)
         plt.savefig('Flux Best Fit.png')
         plt.show()
     
@@ -505,21 +498,21 @@ class zfinder(flux_zfind):
         return z_fft_pp
 
 def main():
-    image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
-    ra = [8, 56, 14.8]
-    dec = [2, 24, 0.6, 1]
+    # image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
+    # ra = [8, 56, 14.8]
+    # dec = [2, 24, 0.6, 1]
     
-    # image = 'SPT_0345-47.contsub.clean.taper.image.fits'
-    # ra = [3, 45, 10.77]
-    # dec = [-47, 25, 39.5, -1]
+    image = 'SPT_0345-47.contsub.clean.taper.image.fits'
+    ra = [3, 45, 10.77]
+    dec = [-47, 25, 39.5, -1]
     
     transition = 115.2712
     aperture_radius = 3
     bvalue = 3
     
     gleam_0856 = zfinder(image, ra, dec, transition, aperture_radius, bvalue)
-    # gleam_0856.zflux(penalise=True)
-    gleam_0856.zfft()
+    gleam_0856.zflux(z_start=4.28, dz=0.0001, z_end=4.31, penalise=True)
+    gleam_0856.zfft(z_start=4.28, dz=0.0001, z_end=4.31)
     # gleam_0856.random_stats(n=5)
     # gleam_0856.fft_per_pixel(size=11, z_start=4.28,  dz=0.0001, z_end=4.31)
 
