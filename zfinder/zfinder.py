@@ -1,4 +1,5 @@
 import csv
+import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -130,11 +131,25 @@ class zfinder(flux_zfind):
         # Sort points
         for snr, pix, pk in zip(snrs[1:], pixels[1:], peaks[1:]):
             num_pks = len(pk)
-            if num_pks < 2 or num_pks > 4: # bad - no redshift or extremely high redshift (z>15)
+            
+            # If there are no lines
+            if len(snr) == 0:
+                continue
+            
+            # bad - negative peaks
+            if any(pk) < 0 or len(pix) == 0:
+                pix = np.zeros(len(pk)).tolist()
                 green_points_x.append(pix)
                 green_points_y.append(snr)
                 continue
             
+            # bad - no redshift or extreme redshift (z>15)
+            if num_pks < 2 or num_pks > 4: 
+                green_points_x.append(pix)
+                green_points_y.append(snr)
+                continue
+            
+            # Two peaks is a good sign its real
             if num_pks == 2:
                 pk_diffs = np.abs(np.diff(pk)) # needs to be at least 200 channels  
                 if pk_diffs > 200:
@@ -143,6 +158,8 @@ class zfinder(flux_zfind):
                 else:
                     orange_points_x.append(pix)
                     orange_points_y.append(snr)
+            
+            # Check 3 or 4 peaks
             else:
                 pk_diffs = np.abs(np.diff(pk))            
                 pk_diffs = np.abs(np.diff(pk_diffs))
@@ -153,6 +170,12 @@ class zfinder(flux_zfind):
                 else:
                     orange_points_x.append(pix)
                     orange_points_y.append(snr)
+        
+        # The number of points irrespective of how many sslf lines found
+        blue_points = len(blue_points_x)
+        green_points = len(green_points_x)
+        orange_points = len(orange_points_x)
+        red_points = len(red_points_x)
 
         # Flatten lists of lists to one big list
         blue_points_x = flatten_list(blue_points_x)
@@ -163,13 +186,23 @@ class zfinder(flux_zfind):
         orange_points_y = flatten_list(orange_points_y)
         red_points_x = flatten_list(red_points_x)
         red_points_y = flatten_list(red_points_y)
+        
+        # Random points
+        with open(f'snr_vs_pix.csv', 'w', newline='') as f:
+            wr = csv.writer(f)
+            rows = zip(['Blue', 'Green', 'Yellow', 'Red'], 
+                       [blue_points, green_points, orange_points, red_points])
+            for row in rows:
+                wr.writerow(row)
+            wr.writerow([])
 
         # Make the plot
+        plt.figure(figsize=(20,9))
         plt.scatter(blue_points_x, blue_points_y, s=60, marker='*', color='blue')
         plt.scatter(green_points_x, green_points_y, s=60, marker='X', color='green')
         plt.scatter(orange_points_x, orange_points_y, s=60, marker='D', color='darkorange')
         plt.scatter(red_points_x, red_points_y, s=60, marker='s', color='red')
-        # plt.title('No. Random Points = 5', fontsize=20)
+        plt.title(f'No. Random Points = {len(snrs)-1}', fontsize=20)
         plt.xlabel('No. of Pixels', fontsize=20)
         plt.ylabel('SNR', fontsize=20)
         plt.legend(['Target', 'No significance', 'Low significance', 'High significance'])
@@ -179,25 +212,32 @@ class zfinder(flux_zfind):
         plt.show()
         
     @staticmethod
-    def _plot_circle_points(coords, radius):
+    def _plot_circle_points(coords, radius, header):
         """ Plot the corodinates of the random points """
+        # If there are more than 2 axis, drop them
+        w = WCS(header) # Get the world coordinate system
+        if header['NAXIS'] > 2:
+            w = w.dropaxis(3) # stokes
+            w = w.dropaxis(2) # frequency
+        
         circle_points = np.transpose(coords)
         points_x = circle_points[0, :] # all x coordinates except the first which is the original
         points_y = circle_points[1, :] # all y coordinates except the first which is the original
         centre_x = points_x[0]
         centre_y = points_y[0]
-        circ = plt.Circle((centre_x, centre_y), radius, fill=False, color='blue')
-        fig, ax = plt.subplots()
+        circ = plt.Circle((centre_x, centre_y), radius, fill=False, color='blue', label='_nolegend_')
+        fig, ax = plt.subplots(subplot_kw={'projection': w})
         fig.set_figwidth(7)
         fig.set_figheight(7)
         ax.add_patch(circ)
         plt.scatter(points_x[0], points_y[0], color='black')
         plt.scatter(points_x[1:], points_y[1:], color='blue')
-        plt.title('Distribution of spaced random points')
+        plt.title(f'Distribution of {len(coords)-1} spaced random points')
         plt.xlim(-radius-1+centre_x, radius+1+centre_x)
         plt.ylim(-radius-1+centre_y, radius+1+centre_y)
-        plt.xlabel('x')
-        plt.ylabel('y')
+        plt.xlabel('RA', fontsize=15)
+        plt.ylabel('DEC', fontsize=15)
+        plt.legend(['Target', 'Random'])
         plt.savefig('Point Distribution.png', dpi=200)
         plt.show()
     
@@ -214,7 +254,7 @@ class zfinder(flux_zfind):
     @staticmethod
     def _export_heatmap_csv(delta_z):
         """ Export matrix of delta redshifts"""
-        with open(f'heatmap_data.csv', 'w') as f:
+        with open(f'heatmap_data.csv', 'w', newline='') as f:
             wr = csv.writer(f)
             for row in delta_z:
                 wr.writerow(row)
@@ -252,14 +292,16 @@ class zfinder(flux_zfind):
                 deltas.append(delta_z)
             all_deltas.append(deltas)
         
-        self._export_heatmap_csv(all_deltas)        
+        self._export_heatmap_csv(all_deltas)  
+        plt.xlabel('RA', fontsize=15)      
+        plt.ylabel('DEC', fontsize=15)      
         plt.savefig('FFT PP Heatmap.png')
         plt.show()
 
-    def _z_uncert(self, z, chi2, sigma):
+    def _z_uncert(self, z, chi2, sigma, reduction):
         """ Caclulate the uncertainty on the best fitting redshift """
         reduced_sigma = sigma**2 / (len(self.flux) - 2*len(self.peaks) - 1)
-        neg, pos = z_uncert(z, chi2, reduced_sigma)
+        neg, pos = z_uncert(z, chi2, reduced_sigma, reduction)
         return neg, pos
     
     def _plot_blind_lines(self):
@@ -307,7 +349,7 @@ class zfinder(flux_zfind):
         plt.savefig('FFT Best Fit.png', dpi=200)
         plt.show()
     
-    def zflux(self, z_start=0, dz=0.01, z_end=10, sigma=1, penalise=True):
+    def zflux(self, z_start=0, dz=0.01, z_end=10, sigma=1, penalise=True, reduction=False):
         """ 
         Finds the best redshift by fitting gaussian functions overlayed on flux data. The
         chi-squared is calculated at every redshift by iterating through delta-z. The most 
@@ -331,6 +373,10 @@ class zfinder(flux_zfind):
             
         penalise : bool, optional
             If True, perform chi-squared penalisation with sslf. Default = True
+        
+        reduction : bool, optional
+            Can greatly reduce uncertainty. Choose to reduce all chi2 values
+            such that the minimum chi2 is 0. Default = False
         """
         
         self.dz = dz
@@ -338,6 +384,9 @@ class zfinder(flux_zfind):
         # Find the redshift 
         source = flux_zfind(self.transition, self.frequency, self.flux, self.uncertainty)
         z, chi2 = source.gauss_zfind(z_start, dz, z_end, sigma, penalise)
+        if reduction:
+            min_chi2 = min(chi2)
+            chi2 = [i - min_chi2 for i in chi2]
         params, perr = source.gauss_params()
         self.peaks, self.snrs, self.scales = source.gauss_sslf()
         self.min_z = z[np.argmin(chi2)]
@@ -345,10 +394,10 @@ class zfinder(flux_zfind):
         # Save the data
         self._plot_chi2(z, chi2, dz, 'Flux')
         self._plot_flux(params)
-        neg, pos = self._z_uncert(z, chi2, sigma)
+        neg, pos = self._z_uncert(z, chi2, sigma, reduction=reduction)
         self._export_csv('flux', neg, self.min_z, pos, params, perr, z, chi2)
         
-    def zfft(self, z_start=0, dz=0.01, z_end=10, sigma=1):
+    def zfft(self, z_start=0, dz=0.01, z_end=10, sigma=1, reduction=False):
         """ 
         Finds the best redshift by performing the fast fourier transform on the flux data. The
         chi-squared is caclulated at every redshift by iterating through delta-z. The most 
@@ -369,6 +418,10 @@ class zfinder(flux_zfind):
         sigma : float, optional
             The significance level of the uncertainty in the redshift 
             found at the minimum chi-squared. Default = 1
+        
+        reduction : bool, optional
+            Can greatly reduce uncertainty. Choose to reduce all chi2 values
+            such that the minimum chi2 is 0. Default = False
         """
         
         self.dz = dz
@@ -379,6 +432,9 @@ class zfinder(flux_zfind):
         # Get the redshift
         fft_source = fft_zfind(self.transition, self.frequency, self.flux)
         z, chi2 = fft_source.fft_zfind(z_start, dz, z_end, sigma)
+        if reduction:
+            min_chi2 = min(chi2)
+            chi2 = [i - min_chi2 for i in chi2]
         params, perr = fft_source.fft_params()
         self.all_num_peaks = fft_source.peaks
         self.min_z = z[np.argmin(chi2)]
@@ -386,15 +442,15 @@ class zfinder(flux_zfind):
         # Save the data
         self._plot_chi2(z, chi2, dz, 'FFT')
         self._plot_fft_flux(params)
-        neg, pos = self._z_uncert(z, chi2, sigma)
+        neg, pos = self._z_uncert(z, chi2, sigma, reduction=reduction)
         self._export_csv('FFT', neg, self.min_z, pos, params, perr, z, chi2)
     
     def random_stats(self, n=100, radius=50, spread=1):
         """ 
         Iterate through n-1 randomly generated coordinates to find the 
         signal-to-noise ratio, number of pixels, and channel peaks for each.
-        The first position is always the target, so if n=100, only 99 are
-        random.
+        The first position is always the target: if n=100, only 99 are
+        random, with the first being the target.
         
         Parameters
         ----------
@@ -421,7 +477,7 @@ class zfinder(flux_zfind):
         """
         
         snrs, pixels, peaks = self.source.random_analysis(n, radius, spread)
-        self._plot_circle_points(self.source.coordinates, radius)        
+        self._plot_circle_points(self.source.coordinates, radius, self.source.hdr)        
         self._plot_pixels(snrs, pixels, peaks)
     
     def fft_per_pixel(self, size, z_start=0, dz=0.01, z_end=10, sigma=1):
@@ -490,7 +546,10 @@ class zfinder(flux_zfind):
 
                 end = time()
                 elapsed = end - start
-                print(f'{i+1}/{size**2}, {round(elapsed,2)} seconds')
+                
+                remaining = datetime.timedelta(seconds=round((size**2-(i+1))*elapsed))
+                
+                print(f'{i+1}/{size**2}, took {round(elapsed,2)} seconds, approx {remaining} remaining')
                 i+=1
 
         self.z_fft_pp = np.array_split(z_fft_pp, size)
@@ -511,9 +570,12 @@ def main():
     bvalue = 3
     
     gleam_0856 = zfinder(image, ra, dec, transition, aperture_radius, bvalue)
-    gleam_0856.zflux(z_start=4.28, dz=0.0001, z_end=4.31, penalise=True)
-    gleam_0856.zfft(z_start=4.28, dz=0.0001, z_end=4.31)
-    # gleam_0856.random_stats(n=5)
+    # gleam_0856.zflux(z_start=4.2, dz=0.0001, z_end=4.4)
+    # gleam_0856.zfft(z_start=4.28, dz=0.0001, z_end=4.31)
+    
+    # gleam_0856.zflux(z_start=5, dz=0.001, z_end=6)
+    # gleam_0856.zfft(z_start=5, dz=0.001, z_end=6)
+    gleam_0856.random_stats(n=5)
     # gleam_0856.fft_per_pixel(size=11, z_start=4.28,  dz=0.0001, z_end=4.31)
 
 if __name__ == '__main__':

@@ -1,4 +1,7 @@
+import datetime
 import numpy as np
+
+from time import time
 from random import random
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -314,6 +317,7 @@ class fits2flux(object):
 
         # Use sslf to find lines on all points
         for i, (x, y) in enumerate(self.coordinates):
+            start = time()
             self.ra, self.dec = pix2wcs(x,y, self.hdr) # convert x, y to ra,dec
 
             flux, uncert = self.get_flux()
@@ -325,7 +329,12 @@ class fits2flux(object):
             all_snrs.append(snrs)
             all_pixels.append(pixels)
             all_spec_peaks.append(spec_peaks)
-            print(f'{i+1}/{len(self.coordinates)}')
+            
+            end = time()
+            elapsed = end - start 
+            remaining = datetime.timedelta(seconds=round(elapsed*(num_points-(i+1))))
+            
+            print(f'{i+1}/{len(self.coordinates)}, took {round(elapsed,2)} seconds, approx {remaining} remaining')
 
         return all_snrs, all_pixels, all_spec_peaks
 

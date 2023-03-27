@@ -107,7 +107,6 @@ class fft_zfind(object):
 
         # Interate through the list of redshifts and calculate the chi-squared
         for dz in z:
-            dz = dz
             
             # Find the best fitting parameters at this redshift
             params, covars = find_params(self.transition, ffreq, fflux, dz, x0)

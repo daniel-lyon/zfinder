@@ -1,18 +1,18 @@
 from numpy import sqrt, argmin
 from scipy.optimize import curve_fit
 
-def _quadratic(x, a, b, c):
+def quadratic(x, a, b, c):
     """ Fit a quadratic to 3 points closest to the minimum chi-squared """
     y = a*(x-b)**2 + c
     return y
 
-def _solve_quadratic(y, a, b, c):
+def solve_quadratic(y, a, b, c):
     """ Solve the quadratic to find x at a certain sigma """
     neg = -sqrt((y-c)/a) + b
     pos = sqrt((y-c)/a) + b
     return neg, pos
 
-def z_uncert(z, chi2, ssigma):
+def z_uncert(z, chi2, ssigma, reduction=False):
     """
     Caclulate the uncertainty in the best fitting redshift
 
@@ -27,18 +27,24 @@ def z_uncert(z, chi2, ssigma):
     ssigma : float
         The squared significance level of the uncertainty. ssigma = sigma**2
     
+    reduction : bool, optional
+        Choose to reduce all chi2 values such that the minimum chi2 is 0. Default = False
+    
     Returns
     -------
     neg_uncert : float
-        The left (- negative) uncertainty
+        The left (- / negative) uncertainty
 
     pos_uncert : float
-        The right (+ positive) uncertainty
+        The right (+ / positive) uncertainty
     """
     
     lowest_y_index = argmin(chi2)
     min_x = z[lowest_y_index]
     min_y = min(chi2)
+    
+    if reduction:
+        chi2 = [i - min_y for i in chi2]
 
     # Get points left and right of lowest_y that is above lowest_y + sigma
     left = lowest_y_index-1
@@ -49,10 +55,10 @@ def z_uncert(z, chi2, ssigma):
     points_y = [chi2[left], min_y, chi2[right]]
     
     # Find the parameters of the parabola that connects left, lowest, & right
-    params, covars = curve_fit(lambda x, a: _quadratic(x, a, b=min_x, c=min_y), points_x, points_y)
+    params, covars = curve_fit(lambda x, a: quadratic(x, a, b=min_x, c=min_y), points_x, points_y)
 
     # Calculate the x points above lowest_y + sigma 
-    neg, pos = _solve_quadratic(min_y + ssigma, *params, b=min_x, c=min_y)
+    neg, pos = solve_quadratic(min_y + ssigma, *params, b=min_x, c=min_y)
 
     # Calculate the uncertainty in x
     neg_uncert = min_x - neg
