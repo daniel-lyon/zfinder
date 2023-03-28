@@ -103,3 +103,11 @@ source = fft_zfind(transition, freq, flux)
 z, chi2 = source.fft_zfind()
 ffreq, fflux = fft(freq, flux)
 ```
+
+Citing zfinder
+----------
+If you used zfinder in your paper, please be sure to cite it: (link when published)
+
+Contributing
+----------
+If you have found a bug, please raise an issue. Alternatively, if you know how to fix it, you can be become a contributor by submitting a pull request.
