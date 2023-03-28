@@ -24,7 +24,7 @@ Basic Usage
 zfinder will automatically show and save plotted images and csv files for each method.
 
 ```python
-from zfinder import zfinder
+from zfinder.zfinder import zfinder
 
 image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
 ra = [8, 56, 14.8]
