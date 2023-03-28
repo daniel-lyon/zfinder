@@ -45,7 +45,7 @@ Physical Methodology
 
 A three dimensional `.fits` data cube of right ascension (ra), declination (dec), and frequency is required to find the redshift. Given a target ra and dec, the flux at the target location is calculated across all frequencies. To find the redshift of the source, zfinder searches for emission lines of an element or molecule. Carbon Monoxide (115.2712 GHz, ~2.6mm) is a tracer of cold gas - it is theorised that Active Galactic Nuclei (AGN) at high redshifts have lots of cold gas circling around the black hole. Emission lines appear at integer multiples of the corresponding fundamental frequency, meaning for CO emission lines, they appear at 230.5424 GHz, 345.8136 GHz, etc (theoretically up to infinity). As the redshift of a source increases, the new fundamental frequency becomes equal to 1/(1+z), where z is the redshift. Gaussians at integer multiples of the fundamental frequency are overlayed onto the flux data of the source and the chi-squared is calculated by incrementing z by small changes. The minimum chi-squared corresponds to the most likely redshift of the source. At high redshifts (z > ~5), there should be two emission lines present in the flux data. The presence of two or more evenly spaced emission lines indicates a single real redshift solution; there can only be one redshift at which the gaussians will overlay all lines. Having only one line is a clear indicator of lower redshift (z < ~5) but the redshift solution is also indeterminant as there can be several redshifts where only one emission line is present.
 
-Example Usage Source: J085614 + 022400
+Example Source: J085614 + 022400
 ----------
 
 <h1 align="left">
@@ -57,6 +57,11 @@ Example Usage Source: J085614 + 022400
   <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/flux_animation.gif" width="800">
   <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/redshift_animation.gif" width="800">
   <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/chi2_animation.gif" width="800">
+</h1>
+
+<h1 align="left">
+  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_flux.png">
+  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_chi2.png">
 </h1>
 
 Other Usage
