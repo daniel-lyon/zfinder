@@ -1,0 +1,12 @@
+setup.py
+zfinder/__init__.py
+zfinder/fft_zfind.py
+zfinder/fits2flux.py
+zfinder/flux_zfind.py
+zfinder/uncertainty.py
+zfinder/zfinder.py
+zfinder.egg-info/PKG-INFO
+zfinder.egg-info/SOURCES.txt
+zfinder.egg-info/dependency_links.txt
+zfinder.egg-info/requires.txt
+zfinder.egg-info/top_level.txt

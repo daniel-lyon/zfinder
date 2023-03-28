@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: zfinder
+Version: 0.0.1.5
+Summary: Redshift finding algorithm
+Author: Daniel Lyon
+Author-email: daniellyon31@gmail.com
+Keywords: python,visualisation,redshift,galaxy-evolution,cosmology,epoch-of-reionisation,radio-galaxies,active-galactic-nuclei,high-redshift,galaxies,black-holes
+Classifier: Development Status :: 5 - Production/Stable
+Classifier: Intended Audience :: Science/Research
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS :: MacOS X
+Classifier: Operating System :: Microsoft :: Windows
+Description-Content-Type: text/markdown
+
+Find the redshift of high redshift radio galaxies
