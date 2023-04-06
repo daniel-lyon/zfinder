@@ -24,7 +24,7 @@ Basic Usage
 zfinder will automatically show and save plotted images and csv files for each method.
 
 ```python
-from zfinder.zfinder import zfinder
+from zfinder import zfinder
 
 image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
 ra = [8, 56, 14.8]
@@ -68,10 +68,10 @@ Other Usage
 ----------
 zfinder is a wrapper on individual python files `fits2flux.py`, `flux_zfind.py`, and `fft_zfind.py`. Note that when using these files individually, no plots or csv files are generated or saved.
 
-`fits2flux`'s main purpose is to extract the flux and frequency data from a .fits cube. It will also convert each axis to scientific notation; you can find the factor each axis has been changed by with `get_exponents()`.
+`Fits2flux`'s main purpose is to extract the flux and frequency data from a .fits cube. It will also convert each axis to scientific notation. You can find the factor each axis has been changed by with `get_exponents()`.
 
 ```python
-from zfinder import fits2flux
+from zfinder import Fits2flux
 
 image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
 ra = [8, 56, 14.8]
@@ -85,21 +85,21 @@ flux, uncert = gleam_0856.get_flux()
 x, y = gleam_0856.get_exponents()
 ```
 
-The main purpose of `flux_zfind` is to use the TSM to find the redshift of the source. When using this individually from `zfinder`, you will need to supply `flux_zfind` with the flux, frequency, and uncertainty lists yourself found with `fits2flux`. 
+The main purpose of `Template` from `flux_zfind` is to use the TSM to find the redshift of the source. When using this individually from `zfinder`, you will need to supply `Template` with the flux, frequency, and uncertainty lists yourself found with `fits2flux`. 
 
 ```python
-from zfinder import flux_zfind
+from zfinder import Template
 
-source = flux_zfind(transition, freq, flux, uncert)
+source = Template(transition, freq, flux, uncert)
 z, chi2 = source.gauss_zfind()
 ```
 
-Similarly to `flux_zind`, `fft_zfind` works by performing the FTM on the flux data. If you just want to return the FFTed data, you can import `fft` along side `fft_zfind`.
+Similarly to `flux_zind`, `Fourier` from `fft_zfind` works by performing the FTM on the flux data. If you just want to return the FFTed data, you can use the `fft` method defined inside `Fourier`.
 
 ```python
-from zfinder import fft_zfind, fft
+from zfinder import Fourier
 
-source = fft_zfind(transition, freq, flux)
+source = Fourier(transition, freq, flux)
 z, chi2 = source.fft_zfind()
 ffreq, fflux = fft(freq, flux)
 ```
