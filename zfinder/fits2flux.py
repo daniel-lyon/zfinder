@@ -31,6 +31,39 @@ def wcs2pix(ra, dec, hdr):
     x, y = w.all_world2pix(ra, dec, 1)
     return [x, y]
 
+def get_sci_exponent(number):
+    """ Find the scientific exponent of a number """
+    abs_num = np.abs(number)
+    base = np.log10(abs_num) # Log rules to find exponent
+    exponent = int(np.floor(base)) # convert to floor integer
+    return exponent
+
+def get_eng_exponent(number):
+    """ 
+    Find the nearest power of 3 (lower). In engineering format,
+    exponents are multiples of 3.
+    """
+    exponent = get_sci_exponent(number) # Get scientific exponent
+    for i in range(3):
+        
+        if exponent > 0:
+            unit = exponent-i
+        else:
+            unit = exponent+i
+            
+        if unit % 3 == 0: # If multiple of 3, return it
+            return unit
+
+def average_zeroes(array):
+    """ Average zeroes with left & right values in a list """
+    for i, val in enumerate(array):
+        if val == 0:
+            try:
+                array[i] = (array[i-1] + array[i+1])/2
+            except IndexError:
+                array[i] = (array[i-2] + array[i-1])/2
+    return array
+
 class Fits2flux():
     """
     Easily calculate and extract the frequency and flux data based on specified coordinates and aperture radius.
@@ -101,7 +134,7 @@ class Fits2flux():
 
         # Uncertainty
         aperstats = ApertureStats(channel, annulus) 
-        rms  = aperstats.std 
+        rms = aperstats.std 
 
         # Background
         bkg = Background2D(channel, bkg_radius).background 
@@ -134,6 +167,10 @@ class Fits2flux():
 
         # Create axis list
         frequency = np.linspace(start, end, length)
+
+        # Normalise to engineering notation
+        freq_exp = get_eng_exponent(frequency[0])
+        frequency = frequency / 10**freq_exp
         return frequency
     
     def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1):
@@ -156,10 +193,6 @@ class Fits2flux():
         f_uncert : list
             A list of flux uncertainty values for each flux measurement        
         """
-
-        # Initialise array of fluxes and uncertainties to be returned
-        flux = []
-        f_uncert = []
         
         # Calculate area of the beam
         barea = self._calc_beam_area(self._bin_hdu, beam_tolerance)
@@ -176,11 +209,20 @@ class Fits2flux():
         inputs = [(channel, aperture, annulus, bkg_radius, pix2deg, barea) for channel in self._data]
         with Pool() as p:
             results = p.starmap(self._process_channel_data, inputs)
-        flux, f_uncert = zip(*results)
+        flux, flux_uncert = zip(*results)
 
+        # Return as np arrays
         flux = np.array(flux)
-        f_uncert = np.array(f_uncert)
-        return flux, f_uncert
+        flux_uncert = np.array(flux_uncert)
+
+        # Average zeroes so there isn't div by zero error later
+        flux_uncert = average_zeroes(flux_uncert)    
+
+        # Normalise to engineering notation
+        flux_exp = get_eng_exponent(np.max(flux))
+        flux = flux / 10**flux_exp
+        flux_uncert = flux_uncert / 10**flux_exp
+        return flux, flux_uncert
 
 def main():
     fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
