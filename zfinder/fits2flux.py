@@ -1,18 +1,15 @@
 # Import packages
 import numpy as np
+from warnings import filterwarnings
 
+from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
-from radio_beam import Beam
-from astropy import units as u
-from warnings import filterwarnings
-from photutils.background import Background2D
 from astropy.coordinates import SkyCoord, Angle
-from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
+from radio_beam import Beam
 
-# Ignore warnings (there are hundreds)
-filterwarnings("ignore", module='photutils.background')
-filterwarnings("ignore", module='astropy.wcs.wcs')
+from photutils.background import Background2D
+from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
 def wcs2pix(ra, dec, hdr):
     """ Convert RA, DEC to x, y pixel coordinates """
@@ -33,7 +30,47 @@ def wcs2pix(ra, dec, hdr):
     return [x, y]
 
 class Fits2flux():
-    def __init__(self, fitsfile, ra, dec, aperture_radius):
+    """
+    Easily calculate and extract the frequency and flux data based on specified coordinates and aperture radius.
+    
+    Parameters
+    ----------
+    fitsfile : .fits
+        fits image filename
+    
+    ra : str, list
+        Right Ascension of the target.
+    
+    dec : str, list
+        Declination of the target
+    
+    aperture_radius : float
+        Radius of the aperture to use over the source in pixels
+
+    Methods
+    -------
+    get_freq:
+        Caclulate the frequency axis (Hz)
+    
+    get_flux:
+        Caclulate the flux axis and uncertainty (Jy)
+    
+    Example
+    -------
+    ```python
+    fitsfile = '0856_cube_c0.4_nat_80MHz_taper3.fits'
+    ra = '08:56:14.8'
+    dec = '02:24:00.6'
+    aperture_radius = 3
+
+    image = Fits2flux(fitsfile, ra, dec, aperture_radius)
+    freq = image.get_freq()
+    flux, flux_uncert = image.get_flux()
+    ```
+
+    """
+
+    def __init__(self, fitsfile, ra, dec, aperture_radius, warnings=False):
         self._hdr = fits.getheader(fitsfile)
         self._data = fits.getdata(fitsfile)[0]
         self._bin_hdu = fits.open(fitsfile)[1]
@@ -41,19 +78,20 @@ class Fits2flux():
         self._dec = dec
         self._aperture_radius = aperture_radius
 
+       # Ignore warnings (there are sometimes hundreds)
+        if not warnings:
+            filterwarnings("ignore", module='photutils.background')
+            filterwarnings("ignore", module='astropy.wcs.wcs')
+            filterwarnings("ignore", category=UserWarning)
 
     @staticmethod
-    def __calc_beam_area(bin_hdu, tolerance=1):
+    def _calc_beam_area(bin_hdu, tolerance=1):
         """ Caclulate the corrected beam area (from Jy/beam to Jy) """
-
-        # Get 
         beam = Beam.from_fits_bintable(bin_hdu, tolerance)
-        bmaj = beam.major.value / 3600
-        bmin = beam.minor.value / 3600
-
-        # bmaj = bvalue/3600
-        barea = 1.1331 * bmaj * bmin
-        return barea
+        bmaj = beam.major.value / 3600 # in degrees
+        bmin = beam.minor.value / 3600 # in degrees
+        beam_area = 1.1331 * bmaj * bmin
+        return beam_area
 
     def get_freq(self):
         """ 
@@ -77,9 +115,17 @@ class Fits2flux():
         frequency = np.linspace(start, end, length)
         return frequency
     
-    def get_flux(self, bkg_radius=(50, 50)):
+    def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1):
         """ 
         For every frequency channel, find the flux and associated uncertainty at a position
+
+        Paramters
+        ---------
+        bkg_radius : tuple, optional
+            The radius of which to find the background flux. Default=(50,50).
+        
+        beam_tolerance : int, optional
+            The tolerance of the differences between multiple beams. Default=1.
         
         Returns
         -------
@@ -95,7 +141,7 @@ class Fits2flux():
         f_uncert = []
         
         # Calculate area of the beam
-        barea = self.__calc_beam_area(self._bin_hdu)
+        barea = self._calc_beam_area(self._bin_hdu, beam_tolerance)
         pix2deg = self._hdr['CDELT2'] # Pixel to degree conversion factor
 
         # The position to find the flux at
