@@ -17,10 +17,8 @@ def _gaussf(x, a, s, x0):
 
 def _calc_reduced_chi2(flux, flux_expected, flux_uncertainty, gauss_lines):
     """ Calculate the reduced chi-squared: chi2_r = chi2 / (num_points - free_params - 1) """
-
-    # Calculate the degrees of freedom
     gauss_dofs = 2*len(gauss_lines) # 2 DoF per gaussian (amp, std)
-    DoF = len(flux) - gauss_dofs - 1
+    DoF = len(flux) - gauss_dofs - 1 # Calculate the degrees of freedom
 
     # Calculate chi-squared
     chi2 = sum(((flux - flux_expected) / flux_uncertainty)**2)
@@ -35,14 +33,12 @@ def _penalise_chi2(gauss_lines, sslf_lines):
     non_penalising_factor = 1 # factor multiplying good fits
     tolerance = 3 # minimum number of channels separating gauss and sslf lines
     
+    # Sort Ascending
     gauss_lines = np.sort(gauss_lines)
     sslf_lines = np.sort(sslf_lines)
 
-    num_gauss = len(gauss_lines)
-    num_blind = len(sslf_lines)
-
     # If the number of lines are not equal, return penalising factor
-    if num_blind != num_gauss:
+    if len(sslf_lines) != len(gauss_lines):
         return penalising_factor
 
     # If the lines are not within a range of each other, return penalising factor
@@ -79,9 +75,38 @@ def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, ss
     reduced_chi2 = _calc_reduced_chi2(flux, flux_expected, flux_uncertainty, gauss_lines) * multiplier
     return reduced_chi2
 
-def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10):
+def zfind_template(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10):
     """
-    Doc string
+    Using the gaussian template shifting method, calculate the reduced chi-squared at every change
+    in redshift.
+
+    Parameters
+    ----------
+    z_start : float, optional
+        The redshift to start calculated chi2 fits at. Default=0
+
+    dz : float, optional
+        Change in redshift to iterature through. Default=0.01
+
+    z_end : float, optional
+        Final redshift to start calculating chi2 at. Default=10
+
+    Returns
+    -------
+    z : list
+        List of redshift values that were iterated through
+
+    chi2 : list
+        List of calculated chi-squared values.
+
+    Example
+    -------
+    ```python
+    z, chi2 = zfind_template()
+
+    lowest_index = np.argmin(chi2)
+    best_fit_redshift = z[lowest_index]
+    ```
     """
 
     z = np.arange(z_start, z_end+dz, dz)
