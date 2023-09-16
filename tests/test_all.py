@@ -3,8 +3,13 @@ import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
+import sys
+
+# Add the path of the directory you want to include
+sys.path.append(r'C:\Users\danie\OneDrive - Queensland University of Technology\ICRAR\zfinder2')
+
 from zfinder.fits2flux import Fits2flux
-from zfinder.zfind import zfind
+from zfinder.zfind_template import template_zfind
 
 def test_main():
     fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
@@ -17,8 +22,7 @@ def test_main():
     freq = source.get_freq()
     flux, flux_uncert = source.get_flux()
 
-    finder = zfind(transition, freq, flux, flux_uncert)
-    z, chi2 = finder.zfind()
+    z, chi2 = template_zfind(transition, freq, flux, flux_uncert)
 
     lowest_index = np.argmin(chi2)
     best_fit_redshift = z[lowest_index]
