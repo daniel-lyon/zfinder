@@ -177,7 +177,7 @@ class Fits2flux():
         with Pool() as p:
             results = p.starmap(self._process_channel_data, inputs)
         flux, f_uncert = zip(*results)
-        
+
         flux = np.array(flux)
         f_uncert = np.array(f_uncert)
         return flux, f_uncert
@@ -198,6 +198,7 @@ def main():
     print()
     print(flux_uncert)
 
-
 if __name__ == '__main__':
-    main()
+    import timeit
+    exec_time = timeit.timeit(main, number=1)
+    print(f"Execution time: {exec_time} seconds")
