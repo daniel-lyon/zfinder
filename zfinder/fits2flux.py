@@ -1,6 +1,6 @@
 # Import packages
 import numpy as np
-from warnings import filterwarnings
+import warnings
 
 from astropy import units as u
 from astropy.io import fits
@@ -10,6 +10,8 @@ from radio_beam import Beam
 
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
+
+from multiprocessing import Pool
 
 def wcs2pix(ra, dec, hdr):
     """ Convert RA, DEC to x, y pixel coordinates """
@@ -67,10 +69,9 @@ class Fits2flux():
     freq = image.get_freq()
     flux, flux_uncert = image.get_flux()
     ```
-
     """
 
-    def __init__(self, fitsfile, ra, dec, aperture_radius, warnings=False):
+    def __init__(self, fitsfile, ra, dec, aperture_radius):
         self._hdr = fits.getheader(fitsfile)
         self._data = fits.getdata(fitsfile)[0]
         self._bin_hdu = fits.open(fitsfile)[1]
@@ -78,11 +79,9 @@ class Fits2flux():
         self._dec = dec
         self._aperture_radius = aperture_radius
 
-       # Ignore warnings (there are sometimes hundreds)
-        if not warnings:
-            filterwarnings("ignore", module='photutils.background')
-            filterwarnings("ignore", module='astropy.wcs.wcs')
-            filterwarnings("ignore", category=UserWarning)
+        # Ignore warnings
+        warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
+        warnings.filterwarnings("ignore", category=UserWarning)
 
     @staticmethod
     def _calc_beam_area(bin_hdu, tolerance=1):
@@ -92,6 +91,28 @@ class Fits2flux():
         bmin = beam.minor.value / 3600 # in degrees
         beam_area = 1.1331 * bmaj * bmin
         return beam_area
+    
+    @staticmethod
+    def _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, barea):
+        """ Function for processing channels in get_flux() """
+
+        # Filter the hundreds of photutils.background.background_2d warnings
+        warnings.filterwarnings("ignore", module='photutils.background')
+
+        # Uncertainty
+        aperstats = ApertureStats(channel, annulus) 
+        rms  = aperstats.std 
+
+        # Background
+        bkg = Background2D(channel, bkg_radius).background 
+
+        # Aperture sum of the fits image minus the background
+        apphot = aperture_photometry(channel - bkg, aperture)
+        apsum = apphot['aperture_sum'][0]
+
+        # Calculate corrected flux
+        total_flux = apsum*(pix2deg**2)/barea
+        return total_flux, rms
 
     def get_freq(self):
         """ 
@@ -149,28 +170,13 @@ class Fits2flux():
 
         # Setup the apertures 
         aperture = CircularAperture(position, self._aperture_radius)
-        annulus = CircularAnnulus(position, r_in=2*self._aperture_radius, r_out=3*self._aperture_radius)
-    
-        # For every page of the 3D data matrix, find the flux around a point (aperture)
-        for channel in self._data:
+        annulus = CircularAnnulus(position, r_in=2*self._aperture_radius, r_out=3*self._aperture_radius)      
 
-            # Uncertainty
-            aperstats = ApertureStats(channel, annulus) 
-            rms  = aperstats.std 
-
-            # Background
-            bkg = Background2D(channel, bkg_radius).background 
-
-            # Aperture sum of the fits image minus the background
-            apphot = aperture_photometry(channel - bkg, aperture)
-            apsum = apphot['aperture_sum'][0]
-
-            # Calculate corrected flux
-            total_flux = apsum*(pix2deg**2)/barea
-
-            # Save values
-            flux.append(total_flux)
-            f_uncert.append(rms)
+        # Parallelise slow loop to execute much faster (why background2D?!)
+        inputs = [(channel, aperture, annulus, bkg_radius, pix2deg, barea) for channel in self._data]
+        with Pool() as p:
+            results = p.starmap(self._process_channel_data, inputs)
+        flux, f_uncert = zip(*results)
         
         flux = np.array(flux)
         f_uncert = np.array(f_uncert)
