@@ -3,9 +3,6 @@ import pytest
 import numpy as np
 import matplotlib.pyplot as plt
 
-import sys
-print(sys.path)
-
 from zfinder.fits2flux import Fits2flux
 from zfinder.zfind import zfind
 
