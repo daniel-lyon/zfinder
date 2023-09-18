@@ -148,6 +148,26 @@ class Fits2flux():
         # Calculate corrected flux
         flux = apsum*(pix2deg**2)/barea
         return flux, flux_uncert
+    
+    def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area):
+        """ Process the flux arrays using multiprocessing """
+        print('Calculating flux values...')
+        pool = Pool()
+        jobs = [pool.apply_async(self._process_channel_data, (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
+        pool.close()
+
+        # Parse results
+        flux = []
+        flux_uncert = []
+        for res in tqdm(jobs):
+            f, u = res.get()
+            flux.append(f)
+            flux_uncert.append(u)
+        
+        # Convert to np arrays
+        flux = np.array(flux)
+        flux_uncert = np.array(flux_uncert)
+        return flux, flux_uncert
 
     def get_freq(self):
         """ 
@@ -206,23 +226,8 @@ class Fits2flux():
         aperture = CircularAperture(position, self._aperture_radius)
         annulus = CircularAnnulus(position, inner_radius, outter_radius)
 
-        # Parallelise slow loop to execute much faster (why background2D?!)
-        print('Calculating flux values...')
-        pool = Pool()
-        jobs = [pool.apply_async(self._process_channel_data, (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
-        pool.close()
-
-        # Parse results
-        flux = []
-        flux_uncert = []
-        for res in tqdm(jobs):
-            f, u = res.get()
-            flux.append(f)
-            flux_uncert.append(u)
-        
-        # Convert to np arrays
-        flux = np.array(flux)
-        flux_uncert = np.array(flux_uncert)
+        # Process the flux arrays
+        flux, flux_uncert = self._process_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area)
 
         # Average zeroes so there isn't div by zero error later
         flux_uncert = average_zeroes(flux_uncert)
