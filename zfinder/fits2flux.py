@@ -4,6 +4,7 @@ Define a class to extract flux and frequency information from a .fits file
 
 import warnings
 from multiprocessing import Pool
+from tqdm import tqdm
 
 import numpy as np
 from astropy import units as u
@@ -135,7 +136,7 @@ class Fits2flux():
 
         # Get flux uncertainty
         aperstats = ApertureStats(channel, annulus)
-        rms = aperstats.std
+        flux_uncert = aperstats.std
 
         # Get background flux
         bkg = Background2D(channel, bkg_radius).background
@@ -145,8 +146,8 @@ class Fits2flux():
         apsum = apphot['aperture_sum'][0]
 
         # Calculate corrected flux
-        total_flux = apsum*(pix2deg**2)/barea
-        return total_flux, rms
+        flux = apsum*(pix2deg**2)/barea
+        return flux, flux_uncert
 
     def get_freq(self):
         """ 
@@ -191,6 +192,7 @@ class Fits2flux():
         f_uncert : list
             A list of flux uncertainty values for each flux measurement        
         """
+
         # Calculate area of the beam
         beam_area = self._calc_beam_area(self._bin_hdu, beam_tolerance)
         pix2deg = self._hdr['CDELT2']  # Pixel to degree conversion factor
@@ -205,12 +207,19 @@ class Fits2flux():
         annulus = CircularAnnulus(position, inner_radius, outter_radius)
 
         # Parallelise slow loop to execute much faster (why background2D?!)
-        inputs = [(channel, aperture, annulus, bkg_radius, pix2deg, beam_area)
-                  for channel in self._data]
-        with Pool() as p:
-            results = p.starmap(self._process_channel_data, inputs)
-        flux, flux_uncert = zip(*results)
+        print('Calculating flux values...')
+        pool = Pool()
+        jobs = [pool.apply_async(self._process_channel_data, (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
+        pool.close()
 
+        # Parse results
+        flux = []
+        flux_uncert = []
+        for res in tqdm(jobs):
+            f, u = res.get()
+            flux.append(f)
+            flux_uncert.append(u)
+        
         # Convert to np arrays
         flux = np.array(flux)
         flux_uncert = np.array(flux_uncert)

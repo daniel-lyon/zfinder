@@ -1,5 +1,7 @@
 # Import packages
+import warnings
 import numpy as np
+from tqdm import tqdm
 
 from sslf.sslf import Spectrum
 
@@ -7,6 +9,8 @@ from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
 
 from multiprocessing import Pool
+
+warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 
 def _gaussf(x, a, s, x0):
     """ Function to fit a sum of gaussians """
@@ -59,8 +63,10 @@ def _find_lines(flux):
 
 def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
-    observed_transition = transition / (1 + dz) # the frequecy of the first observed transition line
+    # Calculate the frequency of the first observed transition line
+    observed_transition = transition / (1 + dz)
 
+    # Fit a gaussian template to the flux
     params, covars = curve_fit(lambda x, a, s: _gaussf(x, a, s, x0=observed_transition), 
         frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True) # best fit
     
@@ -108,14 +114,18 @@ def zfind_template(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     best_fit_redshift = z[lowest_index]
     ```
     """
-
+    # Create a list of redshifts to iterate through
     z = np.arange(z_start, z_end+dz, dz)
     sslf_lines = _find_lines(flux) # E.g. = [60, 270]
 
     # Parallelise slow loop to execute much faster (why background2D?!)
-    inputs = [(transition, frequency, flux, flux_uncertainty, sslf_lines, dz) for dz in z]
-    with Pool() as p:
-        chi2 = p.starmap(_process_chi2_calculations, inputs)
-    chi2 = np.array(chi2)
+    print('Calculating chi-squared values...')
+    pool = Pool()
+    jobs = [pool.apply_async(_process_chi2_calculations, (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
+    pool.close()
 
+    # Parse results
+    chi2 = []
+    for result in tqdm(jobs):
+        chi2.append(result.get())
     return z, chi2
