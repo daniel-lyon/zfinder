@@ -2,226 +2,73 @@
 Doc string
 """
 
-from multiprocessing import Pool
 import warnings
+
 import numpy as np
 import matplotlib.pyplot as plt
 
-from astropy.io import fits
-from radio_beam import Beam
-from photutils.background import Background2D
-from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
-from astropy.wcs import WCS
-from astropy.coordinates import SkyCoord, Angle
-from astropy import units as u
-from tqdm import tqdm
+from zfinder.fits2flux import Fits2flux
+from zfinder.zfind_template import template_zfind
+
+warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 
 class zfinder():
     """
     Doc string
     """
 
-    def __init__(self, fitsfile, ra, dec, aperture_radius, transition):
-        self._hdr = fits.getheader(fitsfile)
-        self._data = fits.getdata(fitsfile)[0]
-        self._bin_hdu = fits.open(fitsfile)[1]
+    def __init__(self, fitsfile, ra, dec, aperture_radius, transition, bkg_radius=(50,50), beam_tolerance=1):
+        self._filename = fitsfile
         self._ra = ra
         self._dec = dec
         self._aperture_radius = aperture_radius
         self._transition = transition
-        self._freq_exponent = None
-        self._flux_exponent = None
+        self._bkg_radius = bkg_radius
+        self._beam_tolerance = beam_tolerance
 
         # Ignore warnings
         warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
-        warnings.filterwarnings("ignore", category=UserWarning)
+        warnings.filterwarnings("ignore", message='Metadata was averaged for keywords CHAN,POL', category=UserWarning)
     
-    def template_fit(self, z_start=0, dz=0.01, z_end=10, bkg_radius=(50,50), beam_tolerance=1):
-        if not hasattr(zfinder, '_frequency'):
-            self._calc_freq_flux(bkg_radius, beam_tolerance)
+    def _plot_template_chi2(self):
+        min_chi2 = min(self._template_chi2)
+        min_z = self._template_z[np.argmin(self._template_chi2)]
+        plt.figure(figsize=(15,7))
+        plt.plot(self._template_z, self._template_chi2, color='black')
+        plt.plot(min_z, min_chi2, 'bo', markersize=5)
+        plt.title(f'Template $\chi^2_r$ = {round(min_chi2, 2)} @ z={min_z}', fontsize=15)
+        plt.xlabel('Redshift', fontsize=15)
+        plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
+        plt.yscale('log')
+        plt.show()
+
+    def _plot_template_flux(self):
         plt.figure(figsize=(15,7))
         plt.plot(self._frequency, np.zeros(len(self._frequency)), color='black', linestyle=(0, (5, 5)))
         plt.plot(self._frequency, self._flux, color='black', drawstyle='steps-mid')
         plt.margins(x=0)
         plt.fill_between(self._frequency, self._flux, 0, where=(np.array(self._flux) > 0), color='gold', alpha=0.75)
         plt.title(f'Template Fit z=', fontsize=15)
-        plt.xlabel(f'Frequency $({_unit_prefixes[self._freq_exponent]}Hz)$', fontsize=15)
-        plt.ylabel(f'Flux $({_unit_prefixes[self._flux_exponent]}Jy)$', fontsize=15)
+        plt.xlabel(f'Frequency $({_unit_prefixes[self._f2f_instance._freq_exponent]}Hz)$', fontsize=15)
+        plt.ylabel(f'Flux $({_unit_prefixes[self._f2f_instance._flux_exponent]}Jy)$', fontsize=15)
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
         plt.show()
     
-    def _calc_freq_flux(self, bkg_radius, beam_tolerance):
-        self._frequency = self._get_freq()
-        self._flux, self._flux_uncert = self._get_flux(bkg_radius, beam_tolerance)
+    def template(self, z_start=0, dz=0.01, z_end=10):
 
-    def _get_freq(self):
-        """ 
-        Caclulate the frequency axis (x-axis) of the flux
+        # Calculate the flux and frequency
+        self._f2f_instance = Fits2flux(self._filename, self._ra, self._dec, self._aperture_radius)
+        self._frequency = self._f2f_instance.get_freq()
+        self._flux, self._flux_uncert = self._f2f_instance.get_flux(self._bkg_radius, self._beam_tolerance)
 
-        Returns
-        -------
-        frequency : list
-            A list of frequencies corresponding to individual channels of a .fits image
-        """
-        # Get frequency axis
-        start = self._hdr['CRVAL3']
-        increment = self._hdr['CDELT3']
-        length = self._hdr['NAXIS3']
-        end = start + length * increment
+        # Calculate the template chi2
+        self._template_z, self._template_chi2 = template_zfind(self._transition, self._frequency, self._flux, self._flux_uncert, z_start, dz, z_end)
 
-        # Create frequency axis
-        frequency = np.linspace(start, end, length)
+        # Plot the template chi2 and flux
+        self._plot_template_chi2()
+        self._plot_template_flux()
 
-        # Normalise to engineering notation
-        self._freq_exponent = get_eng_exponent(frequency[0])
-        frequency = frequency / 10**self._freq_exponent
-        return frequency
-    
-    def _get_flux(self, bkg_radius=(50, 50), beam_tolerance=1):
-        """ 
-        For every frequency channel, find the flux and associated uncertainty at a position
-
-        Paramters
-        ---------
-        bkg_radius : tuple, optional
-            The radius of which to find the background flux. Default=(50,50).
-
-        beam_tolerance : int, optional
-            The tolerance of the differences between multiple beams. Default=1.
-
-        Returns
-        -------
-        flux : list
-            A list of flux values from each frequency channel
-
-        f_uncert : list
-            A list of flux uncertainty values for each flux measurement        
-        """
-
-        # Calculate area of the beam
-        beam_area = self._calc_beam_area(self._bin_hdu, beam_tolerance)
-        pix2deg = self._hdr['CDELT2']  # Pixel to degree conversion factor
-
-        # The position to find the flux at
-        position = wcs2pix(self._ra, self._dec, self._hdr)
-
-        # Setup the apertures
-        inner_radius = 2*self._aperture_radius
-        outter_radius = 3*self._aperture_radius
-        aperture = CircularAperture(position, self._aperture_radius)
-        annulus = CircularAnnulus(position, inner_radius, outter_radius)
-
-        # Process the flux arrays
-        flux, flux_uncert = self._process_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area)
-
-        # Average zeroes so there isn't div by zero error later
-        flux_uncert = average_zeroes(flux_uncert)
-
-        # Normalise to engineering notation
-        self._flux_exponent = get_eng_exponent(np.max(flux))
-        flux = flux / 10**self._flux_exponent
-        flux_uncert = flux_uncert / 10**self._flux_exponent
-        return flux, flux_uncert
-    
-    @staticmethod
-    def _calc_beam_area(bin_hdu, tolerance=1):
-        """ Caclulate the corrected beam area (from Jy/beam to Jy) """
-        beam = Beam.from_fits_bintable(bin_hdu, tolerance)
-        bmaj = beam.major.value / 3600  # in degrees
-        bmin = beam.minor.value / 3600  # in degrees
-        beam_area = 1.1331 * bmaj * bmin
-        return beam_area
-    
-    @staticmethod
-    def _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, barea):
-        """ Function for processing channels in get_flux() """
-
-        # Ignore warnings
-        warnings.filterwarnings("ignore", module='photutils.background')
-
-        # Get flux uncertainty
-        aperstats = ApertureStats(channel, annulus)
-        flux_uncert = aperstats.std
-
-        # Get background flux
-        bkg = Background2D(channel, bkg_radius).background
-
-        # Calculate the sum of pixels in the aperture
-        apphot = aperture_photometry(channel - bkg, aperture)
-        apsum = apphot['aperture_sum'][0]
-
-        # Calculate corrected flux
-        flux = apsum*(pix2deg**2)/barea
-        return flux, flux_uncert
-    
-    def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area):
-        """ Process the flux arrays using multiprocessing """
-        print('Calculating flux values...')
-        pool = Pool()
-        jobs = [pool.apply_async(self._process_channel_data, (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
-        pool.close()
-
-        # Parse results
-        flux = []
-        flux_uncert = []
-        for res in tqdm(jobs):
-            f, u = res.get()
-            flux.append(f)
-            flux_uncert.append(u)
-        
-        # Convert to np arrays
-        flux = np.array(flux)
-        flux_uncert = np.array(flux_uncert)
-        return flux, flux_uncert
-
-def wcs2pix(ra, dec, hdr):
-    """ Convert RA, DEC to x, y pixel coordinates """
-    # Drop stokes and frequency axis.
-    wcs = WCS(hdr)  # Get the world coordinate system
-    if hdr['NAXIS'] > 2:
-        wcs = wcs.dropaxis(3)  # stokes
-        wcs = wcs.dropaxis(2)  # frequency
-
-    # Get the RA & DEC in degrees
-    c = SkyCoord(ra, dec, unit=(u.hourangle, u.degree))
-    ra = Angle(c.ra).degree
-    dec = Angle(c.dec).degree
-
-    # Convert RA & DEC to pixel world coordinates
-    x, y = wcs.all_world2pix(ra, dec, 1)
-    return [x, y]
-
-def get_sci_exponent(number):
-    """ Find the scientific exponent of a number """
-    abs_num = np.abs(number)
-    base = np.log10(abs_num)  # Log rules to find exponent
-    exponent = int(np.floor(base))  # convert to floor integer
-    return exponent
-
-def get_eng_exponent(number):
-    """ 
-    Find the nearest power of 3 (lower). In engineering format,
-    exponents are multiples of 3.
-    """
-    exponent = get_sci_exponent(number)  # Get scientific exponent
-    for i in range(3):
-        if exponent > 0:
-            unit = exponent-i
-        else:
-            unit = exponent+i
-        if unit % 3 == 0:  # If multiple of 3, return it
-            return unit
-
-def average_zeroes(array):
-    """ Average zeroes with left & right values in a list """
-    for i, val in enumerate(array):
-        if val == 0:
-            try:
-                array[i] = (array[i-1] + array[i+1])/2
-            except IndexError:
-                array[i] = (array[i-2] + array[i-1])/2
-    return array
 
 # Get the prefix of a unit from an exponent
 _unit_prefixes = {
@@ -251,8 +98,7 @@ def main():
     transition = 115.2712
 
     source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
-    source.template_fit()
-    # source.zfind_template(z_end=2)
+    source.template(dz=0.01)
     
 if __name__ == '__main__':
     main()
