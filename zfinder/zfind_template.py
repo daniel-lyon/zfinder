@@ -13,7 +13,7 @@ from scipy.optimize import curve_fit
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 
-def _gaussf(x, a, s, x0):
+def gaussf(x, a, s, x0):
     """ Function to fit a sum of gaussians """
     y = 0
     for i in range(1,30):
@@ -55,12 +55,25 @@ def _penalise_chi2(gauss_lines, sslf_lines):
     else:
         return non_penalising_factor
 
-def _find_lines(flux):
-        """ Create a line finder to find significant points """
-        s = Spectrum(flux)
-        s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
-        spec_peaks = s.channel_peaks
-        return spec_peaks
+def find_lines(flux):
+    """ Create a line finder to find significant points """
+    s = Spectrum(flux)
+    s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
+    spec_peaks = s.channel_peaks
+
+    # Calculate the ratio of the snrs and scales
+    snrs = [round(i,2) for i in s.peak_snrs] # the snrs of the peaks
+    scales = [i[1]-i[0] for i in s.channel_edges] # the scales of the peaks
+
+    # Sort lists
+    sorted_lists = zip(*sorted(zip(spec_peaks, snrs, scales)))
+    spec_peaks, snrs, scales = map(list, sorted_lists)
+    return spec_peaks, snrs, scales
+
+def calc_template_params(frequency, flux, observed_transition):
+    params, covars = curve_fit(lambda x, a, s: gaussf(x, a, s, x0=observed_transition), 
+        frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True)
+    return params
     
 def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
@@ -68,11 +81,10 @@ def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, ss
     observed_transition = transition / (1 + dz)
 
     # Fit a gaussian template to the flux
-    params, covars = curve_fit(lambda x, a, s: _gaussf(x, a, s, x0=observed_transition), 
-        frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True) # best fit
+    params = calc_template_params(frequency, flux, observed_transition) # best fit
     
     # Calculate the flux of a perfect function fit
-    flux_expected = _gaussf(frequency, a=params[0], s=params[1], x0=observed_transition)
+    flux_expected = gaussf(frequency, a=params[0], s=params[1], x0=observed_transition)
 
     # Finds the list of Gaussians lines present at this redshift and inside the window (in channel no.#)
     gauss_lines = find_peaks(flux_expected)[0] # E.g. = [60, 270]
@@ -117,10 +129,10 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     """
     # Create a list of redshifts to iterate through
     z = np.arange(z_start, z_end+dz, dz)
-    sslf_lines = _find_lines(flux) # E.g. = [60, 270]
+    sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
 
     # Parallelise slow loop to execute much faster (why background2D?!)
-    print('Calculating chi-squared values...')
+    print('Calculating template chi-squared values...')
     pool = Pool()
     jobs = [pool.apply_async(_process_chi2_calculations, 
         (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
