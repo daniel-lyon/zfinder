@@ -111,8 +111,6 @@ class Fits2flux():
         self._ra = ra
         self._dec = dec
         self._aperture_radius = aperture_radius
-        self._freq_exponent = None
-        self._flux_exponent = None
 
         # Ignore warnings
         warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
@@ -237,3 +235,7 @@ class Fits2flux():
         flux = flux / 10**self._flux_exponent
         flux_uncert = flux_uncert / 10**self._flux_exponent
         return flux, flux_uncert
+    
+    def get_exponents(self):
+        """ Return the exponents of the flux and frequency """
+        return self._freq_exponent, self._flux_exponent
