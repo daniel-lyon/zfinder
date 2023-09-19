@@ -1,14 +1,15 @@
-# Import packages
+"""
+Module for finding the redshift of a source using the gaussian template shifting method.
+"""
+
 import warnings
+from multiprocessing import Pool
+
 import numpy as np
 from tqdm import tqdm
-
 from sslf.sslf import Spectrum
-
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
-
-from multiprocessing import Pool
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 
@@ -55,12 +56,12 @@ def _penalise_chi2(gauss_lines, sslf_lines):
         return non_penalising_factor
 
 def _find_lines(flux):
-    """ Create a line finder to find significant points """
-    s = Spectrum(flux)
-    s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
-    spec_peaks = s.channel_peaks
-    return spec_peaks
-
+        """ Create a line finder to find significant points """
+        s = Spectrum(flux)
+        s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
+        spec_peaks = s.channel_peaks
+        return spec_peaks
+    
 def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
     # Calculate the frequency of the first observed transition line
@@ -81,7 +82,7 @@ def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, ss
     reduced_chi2 = _calc_reduced_chi2(flux, flux_expected, flux_uncertainty, gauss_lines) * multiplier
     return reduced_chi2
 
-def zfind_template(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10):
+def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10):
     """
     Using the gaussian template shifting method, calculate the reduced chi-squared at every change
     in redshift.
@@ -108,7 +109,7 @@ def zfind_template(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     Example
     -------
     ```python
-    z, chi2 = zfind_template()
+    z, chi2 = template_zfind()
 
     lowest_index = np.argmin(chi2)
     best_fit_redshift = z[lowest_index]
@@ -121,7 +122,8 @@ def zfind_template(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     # Parallelise slow loop to execute much faster (why background2D?!)
     print('Calculating chi-squared values...')
     pool = Pool()
-    jobs = [pool.apply_async(_process_chi2_calculations, (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
+    jobs = [pool.apply_async(_process_chi2_calculations, 
+        (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
     pool.close()
 
     # Parse results
