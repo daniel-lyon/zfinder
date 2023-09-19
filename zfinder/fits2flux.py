@@ -4,14 +4,14 @@ Define a class to extract flux and frequency information from a .fits file
 
 import warnings
 from multiprocessing import Pool
-from tqdm import tqdm
 
 import numpy as np
-from astropy import units as u
+from tqdm import tqdm
+from radio_beam import Beam
 from astropy.io import fits
 from astropy.wcs import WCS
+from astropy import units as u
 from astropy.coordinates import SkyCoord, Angle
-from radio_beam import Beam
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
@@ -124,34 +124,13 @@ class Fits2flux():
         bmin = beam.minor.value / 3600  # in degrees
         beam_area = 1.1331 * bmaj * bmin
         return beam_area
-
-    @staticmethod
-    def _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, barea):
-        """ Function for processing channels in get_flux() """
-
-        # Ignore warnings
-        warnings.filterwarnings("ignore", module='photutils.background')
-
-        # Get flux uncertainty
-        aperstats = ApertureStats(channel, annulus)
-        flux_uncert = aperstats.std
-
-        # Get background flux
-        bkg = Background2D(channel, bkg_radius).background
-
-        # Calculate the sum of pixels in the aperture
-        apphot = aperture_photometry(channel - bkg, aperture)
-        apsum = apphot['aperture_sum'][0]
-
-        # Calculate corrected flux
-        flux = apsum*(pix2deg**2)/barea
-        return flux, flux_uncert
     
     def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area):
         """ Process the flux arrays using multiprocessing """
         print('Calculating flux values...')
         pool = Pool()
-        jobs = [pool.apply_async(self._process_channel_data, (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
+        jobs = [pool.apply_async(_process_channel_data, 
+            (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
         pool.close()
 
         # Parse results
@@ -239,3 +218,24 @@ class Fits2flux():
     def get_exponents(self):
         """ Return the exponents of the flux and frequency """
         return self._freq_exponent, self._flux_exponent
+    
+def _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, barea):
+        """ Function for processing channels in get_flux() """
+
+        # Ignore warnings
+        warnings.filterwarnings("ignore", module='photutils.background')
+
+        # Get flux uncertainty
+        aperstats = ApertureStats(channel, annulus)
+        flux_uncert = aperstats.std
+
+        # Get background flux
+        bkg = Background2D(channel, bkg_radius).background
+
+        # Calculate the sum of pixels in the aperture
+        apphot = aperture_photometry(channel - bkg, aperture)
+        apsum = apphot['aperture_sum'][0]
+
+        # Calculate corrected flux
+        flux = apsum*(pix2deg**2)/barea
+        return flux, flux_uncert
