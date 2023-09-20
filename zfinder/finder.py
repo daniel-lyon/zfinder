@@ -11,6 +11,7 @@ from zfinder.fits2flux import Fits2flux
 from zfinder.zfind_template import template_zfind, find_lines, gaussf, calc_template_params
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
 
 class zfinder():
     """
@@ -111,7 +112,7 @@ def main():
     fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
     ra = '08:56:14.8'
     dec = '02:24:00.6'
-    aperture_radius = 3
+    aperture_radius = 2
     transition = 115.2712
 
     source = zfinder(fitsfile, ra, dec, aperture_radius, transition)

@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from zfinder.fits2flux import Fits2flux
-from zfinder.zfind_template import template_zfind
+from zfinder.template import template_zfind
 
 def test_main():
     fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
