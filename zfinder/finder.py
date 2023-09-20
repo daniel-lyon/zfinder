@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from zfinder.fits2flux import Fits2flux
-from zfinder.zfind_template import template_zfind, find_lines, gaussf, calc_template_params
+from zfinder.template import template_zfind, find_lines, gaussf, calc_template_params
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
