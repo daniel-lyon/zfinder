@@ -1,4 +1,3 @@
-# Import packages
 import pytest
 
 import numpy as np
@@ -7,7 +6,7 @@ import matplotlib.pyplot as plt
 from zfinder.fits2flux import Fits2flux
 from zfinder.template import template_zfind
 
-def test_main():
+def test_template():
     fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
     ra = '08:56:14.8'
     dec = '02:24:00.6'
@@ -30,4 +29,4 @@ def test_main():
     plt.show()
 
 if __name__ == '__main__':
-    test_main()
+    test_template()
