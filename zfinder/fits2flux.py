@@ -220,22 +220,22 @@ class Fits2flux():
         return self._freq_exponent, self._flux_exponent
     
 def _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, barea):
-        """ Function for processing channels in get_flux() """
+    """ Function for processing channels in get_flux() """
 
-        # Ignore warnings
-        warnings.filterwarnings("ignore", module='photutils.background')
+    # Ignore warnings
+    warnings.filterwarnings("ignore", module='photutils.background')
 
-        # Get flux uncertainty
-        aperstats = ApertureStats(channel, annulus)
-        flux_uncert = aperstats.std
+    # Get flux uncertainty
+    aperstats = ApertureStats(channel, annulus)
+    flux_uncert = aperstats.std
 
-        # Get background flux
-        bkg = Background2D(channel, bkg_radius).background
+    # Get background flux
+    bkg = Background2D(channel, bkg_radius).background
 
-        # Calculate the sum of pixels in the aperture
-        apphot = aperture_photometry(channel - bkg, aperture)
-        apsum = apphot['aperture_sum'][0]
+    # Calculate the sum of pixels in the aperture
+    apphot = aperture_photometry(channel - bkg, aperture)
+    apsum = apphot['aperture_sum'][0]
 
-        # Calculate corrected flux
-        flux = apsum*(pix2deg**2)/barea
-        return flux, flux_uncert
+    # Calculate corrected flux
+    flux = apsum*(pix2deg**2)/barea
+    return flux, flux_uncert
