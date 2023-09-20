@@ -75,7 +75,7 @@ def calc_template_params(frequency, flux, observed_transition):
         frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True)
     return params
     
-def _process_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
+def _process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
     # Calculate the frequency of the first observed transition line
     observed_transition = transition / (1 + dz)
@@ -131,10 +131,10 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     z = np.arange(z_start, z_end+dz, dz)
     sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
 
-    # Parallelise slow loop to execute much faster (why background2D?!)
-    print('Calculating template fit chi-squared values...')
+    # Parallelise slow loop to execute much faster
+    print('Calculating Template fit chi-squared values...')
     pool = Pool()
-    jobs = [pool.apply_async(_process_chi2_calculations, 
+    jobs = [pool.apply_async(_process_template_chi2_calculations, 
         (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
     pool.close()
 
