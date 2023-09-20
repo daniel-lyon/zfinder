@@ -17,7 +17,7 @@ def double_damped_sinusoid(x, a, s, z, nu, f):
     y = A*np.exp(-(x / C)**2) * (np.cos(p*x) + np.cos(q*x))
     return y
 
-def _calc_fft_params(transition, ffreq, fflux, dz, x0):
+def calc_fft_params(transition, ffreq, fflux, dz, x0):
     """ Find the best fitting parameters for the FFT """
     params, covars = curve_fit(lambda x, a, s: double_damped_sinusoid(x, a, s, z=dz, 
             nu=x0, f=transition), ffreq, fflux, bounds=[[0, 0], [max(fflux), 2]])
@@ -61,7 +61,7 @@ def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     """ Use multiprocessing to significantly speed up chi2 calculations """
   
     # Find the best fitting parameters at this redshift
-    params = _calc_fft_params(transition, ffreq, fflux, dz, x0)
+    params = calc_fft_params(transition, ffreq, fflux, dz, x0)
 
     # Calulate chi-squared
     fflux_obs = double_damped_sinusoid(ffreq, a=params[0], s=params[1], z=dz, nu=x0, f=transition)
