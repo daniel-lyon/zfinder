@@ -104,13 +104,12 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10):
       
     # Fourier transform frequency and flux
     ffreq, fflux = fft(frequency, flux)
-    x0 = frequency[0]
 
     # Parallelise the chi2 calculations
     print('Calculating FFT fit chi-squared values...')
     pool = Pool()
     jobs = [pool.apply_async(process_fft_chi2_calculations, 
-        (transition, frequency, ffreq, fflux, dz, x0)) for dz in z]
+        (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
     pool.close()
 
     # Parse results
