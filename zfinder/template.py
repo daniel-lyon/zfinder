@@ -67,7 +67,10 @@ def find_lines(flux):
 
     # Sort lists
     sorted_lists = zip(*sorted(zip(spec_peaks, snrs, scales)))
-    spec_peaks, snrs, scales = map(list, sorted_lists)
+    try:
+        spec_peaks, snrs, scales = map(list, sorted_lists)
+    except ValueError:
+        spec_peaks, snrs, scales = [], [], [] # when there are 0 lines found
     return spec_peaks, snrs, scales
 
 def calc_template_params(frequency, flux, observed_transition):
@@ -94,7 +97,7 @@ def _process_template_chi2_calculations(transition, frequency, flux, flux_uncert
     reduced_chi2 = _calc_reduced_chi2(flux, flux_expected, flux_uncertainty, gauss_lines) * multiplier
     return reduced_chi2
 
-def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10):
+def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True):
     """
     Using the gaussian template shifting method, calculate the reduced chi-squared at every change
     in redshift.
@@ -109,6 +112,9 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
 
     z_end : float, optional
         Final redshift to start calculating chi2 at. Default=10
+
+    verbose : bool, optional
+        If True, print progress. Default=True
 
     Returns
     -------
@@ -132,7 +138,8 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
 
     # Parallelise slow loop to execute much faster
-    print('Calculating Template fit chi-squared values...')
+    if verbose:
+        print('Calculating Template fit chi-squared values...')
     pool = Pool()
     jobs = [pool.apply_async(_process_template_chi2_calculations, 
         (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
@@ -140,6 +147,6 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
 
     # Parse results
     chi2 = []
-    for result in tqdm(jobs):
+    for result in tqdm(jobs, disable=not verbose):
         chi2.append(result.get())
     return z, chi2
