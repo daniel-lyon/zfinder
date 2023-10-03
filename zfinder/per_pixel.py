@@ -10,6 +10,7 @@ from astropy.coordinates import Angle
 
 from zfinder.fits2flux import Fits2flux, wcs2pix
 from zfinder.fft import fft_zfind
+from zfinder.template import template_zfind
 
 warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
 
@@ -47,16 +48,18 @@ def get_all_flux(fitsfile, ra, dec, aperture_radius):
     """ Get the flux values for all ra and dec coordinates """
     print('Calculating all flux values...')
     all_flux = []
+    all_uncert = []
     for r, d in tqdm(zip(ra, dec), total=len(ra)):
         flux, flux_uncert = Fits2flux(fitsfile, r, d, aperture_radius).get_flux(verbose=False)
         all_flux.append(flux)
-    return all_flux
+        all_uncert.append(flux_uncert)
+    return all_flux, all_uncert
 
 def fft_per_pixel(transition, frequency, all_flux, z_start=0, dz=0.01, z_end=10, size=3):
     """ Doc string here """
 
     # Calculate the chi-squared values
-    print('Calculating FFT fit chi-squared values...')
+    print('Calculating all FFT fit chi-squared values...')
     all_z = []
     for flux in tqdm(all_flux):
         z, chi2 = fft_zfind(transition, frequency, flux, z_start, dz, z_end, verbose=False)
@@ -64,7 +67,21 @@ def fft_per_pixel(transition, frequency, all_flux, z_start=0, dz=0.01, z_end=10,
 
     # Reshape the array
     z = np.reshape(all_z, (size, size))
-    return z      
+    return z 
+
+def template_per_pixel(transition, frequency, all_flux, all_flux_uncertainty, z_start=0, dz=0.01, z_end=10, size=3):
+    """ Doc string here """
+
+    # Calculate the chi-squared values
+    print('Calculating all Template fit chi-squared values...')
+    all_z = []
+    for flux, uncertainty in tqdm(zip(all_flux, all_flux_uncertainty), total=len(all_flux)):
+        z, chi2 = template_zfind(transition, frequency, flux, uncertainty, z_start, dz, z_end, verbose=False)
+        all_z.append(z[np.argmin(chi2)])
+
+    # Reshape the array
+    z = np.reshape(all_z, (size, size))
+    return z     
 
 def _write_csv_rows(filename, data):
     """ Doc string here """
