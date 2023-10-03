@@ -159,12 +159,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-zfinder/0856.contsub.clean.3taper.image.fits
-zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits
-profile.html
-profile.json
+zfinder/*.fits
 .vscode
-template_chi2.png
-template_flux.png
-fft_flux.png
-fft_chi2.png
+*.png
+*.csv

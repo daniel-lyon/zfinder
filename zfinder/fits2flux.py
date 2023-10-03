@@ -17,18 +17,13 @@ from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats,
 
 def wcs2pix(ra, dec, hdr):
     """ Convert RA, DEC to x, y pixel coordinates """
-    # Drop stokes and frequency axis.
-    wcs = WCS(hdr)  # Get the world coordinate system
-    if hdr['NAXIS'] > 2:
-        wcs = wcs.dropaxis(3)  # stokes
-        wcs = wcs.dropaxis(2)  # frequency
-
     # Get the RA & DEC in degrees
     c = SkyCoord(ra, dec, unit=(u.hourangle, u.degree))
     ra = Angle(c.ra).degree
     dec = Angle(c.dec).degree
 
     # Convert RA & DEC to pixel world coordinates
+    wcs = WCS(hdr, naxis=2)
     x, y = wcs.all_world2pix(ra, dec, 1)
     return [x, y]
 
@@ -125,9 +120,10 @@ class Fits2flux():
         beam_area = 1.1331 * bmaj * bmin
         return beam_area
     
-    def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area):
+    def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
         """ Process the flux arrays using multiprocessing """
-        print('Calculating flux values...')
+        if verbose:
+            print('Calculating flux values...')
         pool = Pool()
         jobs = [pool.apply_async(_process_channel_data, 
             (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
@@ -136,7 +132,7 @@ class Fits2flux():
         # Parse results
         flux = []
         flux_uncert = []
-        for res in tqdm(jobs):
+        for res in tqdm(jobs, disable=not verbose):
             f, u = res.get()
             flux.append(f)
             flux_uncert.append(u)
@@ -169,7 +165,7 @@ class Fits2flux():
         frequency = frequency / 10**self._freq_exponent
         return frequency
 
-    def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1):
+    def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1, verbose=True):
         """ 
         For every frequency channel, find the flux and associated uncertainty at a position
 
@@ -204,7 +200,7 @@ class Fits2flux():
         annulus = CircularAnnulus(position, inner_radius, outter_radius)
 
         # Process the flux arrays
-        flux, flux_uncert = self._process_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area)
+        flux, flux_uncert = self._process_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area, verbose)
 
         # Average zeroes so there isn't div by zero error later
         flux_uncert = average_zeroes(flux_uncert)

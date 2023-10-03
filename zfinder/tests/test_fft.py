@@ -18,10 +18,10 @@ def test_fft():
     # Calculate the frequency and flux
     source = Fits2flux(fitsfile, ra, dec, aperture_radius)
     freq = source.get_freq()
-    flux, flux_uncert = source.get_flux()
+    flux, flux_uncert = source.get_flux(verbose=False)
 
     # Calculate the fft chi2
-    z, chi2 = fft_zfind(transition, freq, flux)
+    z, chi2 = fft_zfind(transition, freq, flux, verbose=False)
 
     # Find the best fit redshift
     lowest_index = np.argmin(chi2)
