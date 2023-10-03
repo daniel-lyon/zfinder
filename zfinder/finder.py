@@ -14,7 +14,8 @@ from astropy.wcs import WCS
 from zfinder.fits2flux import Fits2flux, wcs2pix
 from zfinder.template import template_zfind, find_lines, gaussf, calc_template_params
 from zfinder.fft import fft_zfind, double_damped_sinusoid, calc_fft_params, fft
-from zfinder.per_pixel import fft_per_pixel, generate_square_pix_coords, generate_square_world_coords, get_all_flux
+from zfinder.per_pixel import fft_per_pixel, template_per_pixel, \
+    generate_square_pix_coords, generate_square_world_coords, get_all_flux
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
@@ -50,25 +51,26 @@ class zfinder():
             plt.text(x, y+text_offset_high, f'snr={snrs[i]}', color='blue')
             plt.text(x, y+text_offset_low, f'scale={scales[i]}', color='blue')
     
-    def _plot_template_chi2(self):
-        """ Plot the template chi2 """
-        min_chi2 = min(self._template_chi2)
-        self._template_best_z = self._template_z[np.argmin(self._template_chi2)]
+    def _plot_chi2(self, title):
+        """ Plot the chi-sqaured vs redshift """
+        min_chi2 = min(self._chi2)
+        self._best_z = self._z[np.argmin(self._chi2)]
+        self._round_to = len(str(self._dz).split('.')[1])
         plt.figure(figsize=(15,7))
-        plt.plot(self._template_z, self._template_chi2, color='black')
-        plt.plot(self._template_best_z, min_chi2, 'bo', markersize=5)
-        plt.title(f'Template $\chi^2_r$ = {round(min_chi2, 2)} @ z={self._template_best_z}', fontsize=15)
+        plt.plot(self._z, self._chi2, color='black')
+        plt.plot(self._best_z, min_chi2, 'bo', markersize=5)
+        plt.title(f'{title} $\chi^2_r$ = {round(min_chi2, 2)} @ z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Redshift', fontsize=15)
         plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
         plt.yscale('log')
-        plt.savefig('template_chi2.png')
+        plt.savefig(f'{title.lower()}_chi2.png')
         plt.show()
 
     def _plot_template_flux(self):
         """ Plot the template flux """
-        x0 = self._transition/(1+self._template_best_z)
+        x0 = self._transition/(1+self._best_z)
         params = calc_template_params(self._frequency, self._flux, x0)
         plt.figure(figsize=(15,7))
         plt.plot(self._frequency, np.zeros(len(self._frequency)), color='black', linestyle=(0, (5, 5)))
@@ -77,41 +79,25 @@ class zfinder():
         self._plot_sslf_lines()
         plt.margins(x=0)
         plt.fill_between(self._frequency, self._flux, 0, where=(np.array(self._flux) > 0), color='gold', alpha=0.75)
-        plt.title(f'Template Fit z={self._template_best_z}', fontsize=15)
+        plt.title(f'Template Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel(f'Frequency $({_unit_prefixes[self._freq_exp]}Hz)$', fontsize=15)
         plt.ylabel(f'Flux $({_unit_prefixes[self._flux_exp]}Jy)$', fontsize=15)
         plt.xticks(fontsize=12)
         plt.yticks(fontsize=12)
         plt.savefig('template_flux.png')
         plt.show()
-
-    def _plot_fft_chi2(self):
-        """ Plot the fft chi2 """
-        min_chi2 = min(self._fft_chi2)
-        self._fft_best_z = self._fft_z[np.argmin(self._fft_chi2)]
-        plt.figure(figsize=(15,7))
-        plt.plot(self._fft_z, self._fft_chi2, color='black')
-        plt.plot(self._fft_best_z, min_chi2, 'bo', markersize=5)
-        plt.title(f'FFT $\chi^2_r$ = {round(min_chi2, 2)} @ z={self._fft_best_z}', fontsize=15)
-        plt.xlabel('Redshift', fontsize=15)
-        plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
-        plt.yscale('log')
-        plt.savefig('fft_chi2.png')
-        plt.show()
     
     def _plot_fft_flux(self):
         """ Plot the fft flux """
         params = calc_fft_params(self._transition, self._ffreq, 
-            self._fflux, self._fft_best_z, self._frequency[0])
+            self._fflux, self._best_z, self._frequency[0])
         plt.figure(figsize=(15,7))
         plt.plot(self._ffreq, self._fflux, color='black', drawstyle='steps-mid')
         plt.plot(self._ffreq, np.zeros(len(self._fflux)), color='black', linestyle=(0, (5, 5)))
         plt.plot(self._ffreq, double_damped_sinusoid(self._ffreq, *params, 
-            self._fft_best_z, self._frequency[0], self._transition), color='red')
+            self._best_z, self._frequency[0], self._transition), color='red')
         plt.margins(x=0)
-        plt.title(f'FFT Fit z={self._fft_best_z}', fontsize=15)
+        plt.title(f'FFT Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Scale', fontsize=15)
         plt.ylabel('Amplitude', fontsize=15)
         plt.xticks(fontsize=12)
@@ -119,12 +105,13 @@ class zfinder():
         plt.savefig('fft_flux.png')
         plt.show()   
 
-    def _plot_heatmap(self, z):
+    def _plot_heatmap(self, z, title):
         # Calculate the velocities
         target_z = np.take(z, z.size // 2) # redshift of the target ra and dec
         velocities = 3*10**5*((((1 + target_z)**2 - 1) / ((1 + target_z)**2 + 1)) - (((1 + z)**2 - 1) / ((1 + z)**2 + 1))) # km/s
+        scale_velo = np.max(np.abs(velocities))
         
-        # Generate the x and y coordinates to iterate through
+        # Need to get x and y coordinates to plot the heatmap with bounds for correct ra and dec
         hdr = fits.getheader(self._fitsfile)
         target_pix_ra_dec = wcs2pix(self._ra, self._dec, hdr)
         x, y = generate_square_pix_coords(self._size, *target_pix_ra_dec)
@@ -132,14 +119,14 @@ class zfinder():
         # velocities = np.flipud(velocities)
         w = WCS(hdr, naxis=2)
         plt.subplot(projection=w)
-        hm = plt.imshow(velocities, cmap='bwr', interpolation='nearest', vmin=-50, vmax=50,
+        hm = plt.imshow(velocities, cmap='bwr', interpolation='nearest', vmin=-scale_velo, vmax=scale_velo,
                 extent=[x[0], x[-1], y[0], y[-1]],  
                 origin='lower')
         plt.colorbar(hm, label='km/s')
-        plt.title('FFT Per Pixel')
+        plt.title(f'{title} Per Pixel')
         plt.xlabel('RA', fontsize=15)      
         plt.ylabel('DEC', fontsize=15)      
-        plt.savefig('fft_per_pixel.png')
+        plt.savefig(f'{title.lower()}_per_pixel.png')
         plt.show()         
 
     def _calc_freq_flux(self):
@@ -159,6 +146,7 @@ class zfinder():
 
     def template(self, z_start=0, dz=0.01, z_end=10):
         """ Doc string here """
+        self._dz = dz
 
         # Calculate the frequency and flux
         if not hasattr(self, '_frequency'):
@@ -166,21 +154,33 @@ class zfinder():
                 self._freq_exp, self._flux_exp = self._calc_freq_flux()
 
         # Calculate the template chi2
-        self._template_z, self._template_chi2 = template_zfind(self._transition, 
+        self._z, self._chi2 = template_zfind(self._transition, 
             self._frequency, self._flux, self._flux_uncert, z_start, dz, z_end)
 
         # Plot the template chi2 and flux
-        self._plot_template_chi2()
+        self._plot_chi2(title='Template')
         self._plot_template_flux()
 
-    def template_per_pixel(self):
+    def template_pp(self, size, z_start=0, dz=0.01, z_end=10):
         """ 
         Performs the template redshift finding method in a square around the target ra and dec
         """
-        pass
+        self._size = size
+
+        # If the other pp method has not been run, calculate all fluxes and uncertainties
+        if not hasattr(self, '_all_flux'):
+            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size)
+            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, self._aperture_radius)
+
+        frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
+        z = template_per_pixel(self._transition, frequency, self._all_flux, self._flux_uncertainty, z_start, dz, z_end, size)
+        
+        self._write_csv_rows('template_per_pixel.csv', z) # export redshifts to csv
+        self._plot_heatmap(z, title='Template') # Plot the template pp heatmap
 
     def fft(self, z_start=0, dz=0.01, z_end=10):
         """ Doc string here """
+        self._dz = dz
 
         # Calculate the frequency and flux
         if not hasattr(self, '_frequency'):
@@ -191,10 +191,10 @@ class zfinder():
         self._ffreq, self._fflux = fft(self._frequency, self._flux)
 
         # Calculate the fft chi2
-        self._fft_z, self._fft_chi2 = fft_zfind(self._transition, self._frequency, self._flux, z_start, dz, z_end)
+        self._z, self._chi2 = fft_zfind(self._transition, self._frequency, self._flux, z_start, dz, z_end)
 
         # Plot the fft chi2 and flux
-        self._plot_fft_chi2()
+        self._plot_chi2(title='FFT')
         self._plot_fft_flux()     
 
     def fft_pp(self, size, z_start=0, dz=0.01, z_end=10):
@@ -203,13 +203,17 @@ class zfinder():
         """
 
         self._size = size
-        all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size)
-        all_flux = get_all_flux(self._fitsfile, all_ra, all_dec, self._aperture_radius)
+        
+        # If the other pp method has not been run, calculate all fluxes and uncertainties
+        if not hasattr(self, '_all_flux'):
+            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size)
+            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, self._aperture_radius)
+        
         frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
-        z = fft_per_pixel(self._transition, frequency, all_flux, z_start, dz, z_end, size)
+        z = fft_per_pixel(self._transition, frequency, self._all_flux, z_start, dz, z_end, size)
         
         self._write_csv_rows('fft_per_pixel.csv', z) # export redshifts to csv
-        self._plot_heatmap(z) # Plot the fft pp heatmap
+        self._plot_heatmap(z, title='FFT') # Plot the fft pp heatmap
 
 # Get the prefix of a unit from an exponent
 _unit_prefixes = {
@@ -237,8 +241,8 @@ def main():
     dec = '02:24:00.6'
     aperture_radius = 3
     transition = 115.2712
+    
     size = 3
-
     z_start = 5.5
     dz = 0.001
     z_end = 5.6
@@ -246,7 +250,8 @@ def main():
     source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
     source.template(z_start, dz, z_end)
     source.fft(z_start, dz, z_end)
-    source.fft_pp(size, z_start, dz, z_end)
+    # source.fft_pp(size, z_start, dz, z_end)
+    # source.template_pp(size, z_start, dz, z_end)
 
 if __name__ == '__main__':
     main()
