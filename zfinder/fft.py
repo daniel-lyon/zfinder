@@ -20,7 +20,7 @@ def double_damped_sinusoid(x, a, s, z, nu, f):
 def calc_fft_params(transition, ffreq, fflux, dz, x0):
     """ Find the best fitting parameters for the FFT """
     params, covars = curve_fit(lambda x, a, s: double_damped_sinusoid(x, a, s, z=dz, 
-            nu=x0, f=transition), ffreq, fflux, bounds=[[0, 0], [max(fflux), 2]])
+        nu=x0, f=transition), ffreq, fflux, bounds=[[0, 0], [max(fflux), 2]])
     return params
 
 def fft(frequency, flux):
@@ -60,8 +60,12 @@ def _calc_all_num_gauss(transition, frequency, dz):
 def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     """ Use multiprocessing to significantly speed up chi2 calculations """
   
-    # Find the best fitting parameters at this redshift
-    params = calc_fft_params(transition, ffreq, fflux, dz, x0)
+    # Find the best fitting parameters at this redshift. If fails return bad chi2
+    try:
+        params = calc_fft_params(transition, ffreq, fflux, dz, x0)
+    except RuntimeError:
+        chi2 = sum((fflux)**2) * 1.2 # 1.2 is the penalising factor
+        return chi2
 
     # Calulate chi-squared
     fflux_obs = double_damped_sinusoid(ffreq, a=params[0], s=params[1], z=dz, nu=x0, f=transition)
@@ -73,7 +77,7 @@ def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     reduced_chi2 = chi2 / (len(fflux_obs) - 2*len(gauss_peaks) - 1)
     return reduced_chi2
 
-def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10):
+def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose=True):
     """ 
     Finds the best redshift by performing the fast fourier transform on the flux data. The
     chi-squared is caclulated at every redshift by iterating through delta-z. The most 
@@ -89,6 +93,9 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10):
     
     z_end : int, optional
         The final value in the redshift list. Default = 10
+    
+    verbose : bool, optional
+        If True, print progress. Default = False
     
     Returns
     -------
@@ -106,7 +113,8 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10):
     ffreq, fflux = fft(frequency, flux)
 
     # Parallelise the chi2 calculations
-    print('Calculating FFT fit chi-squared values...')
+    if verbose:
+        print('Calculating FFT fit chi-squared values...')
     pool = Pool()
     jobs = [pool.apply_async(process_fft_chi2_calculations, 
         (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
@@ -114,6 +122,6 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10):
 
     # Parse results
     chi2 = []
-    for res in tqdm(jobs):
+    for res in tqdm(jobs, disable=not verbose):
         chi2.append(res.get())    
     return z, chi2
