@@ -21,7 +21,7 @@ def calc_fft_params(transition, ffreq, fflux, dz, x0):
     """ Find the best fitting parameters for the FFT """
     params, covars = curve_fit(lambda x, a, s: double_damped_sinusoid(x, a, s, z=dz, 
         nu=x0, f=transition), ffreq, fflux, bounds=[[0, 0], [max(fflux), 2]])
-    return params
+    return params, covars
 
 def fft(frequency, flux):
     """ 
@@ -62,7 +62,7 @@ def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
   
     # Find the best fitting parameters at this redshift. If fails return bad chi2
     try:
-        params = calc_fft_params(transition, ffreq, fflux, dz, x0)
+        params, _ = calc_fft_params(transition, ffreq, fflux, dz, x0)
     except RuntimeError:
         chi2 = sum((fflux)**2) * 1.2 # 1.2 is the penalising factor
         return chi2

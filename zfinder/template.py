@@ -9,9 +9,11 @@ import numpy as np
 from tqdm import tqdm
 from sslf.sslf import Spectrum
 from scipy.signal import find_peaks
-from scipy.optimize import curve_fit
+from scipy.optimize import curve_fit, OptimizeWarning
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message="invalid value encountered in divide", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message="Covariance of the parameters could not be estimated", category=OptimizeWarning)
 
 def gaussf(x, a, s, x0):
     """ Function to fit a sum of gaussians """
@@ -76,7 +78,7 @@ def find_lines(flux):
 def calc_template_params(frequency, flux, observed_transition):
     params, covars = curve_fit(lambda x, a, s: gaussf(x, a, s, x0=observed_transition), 
         frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True)
-    return params
+    return params, covars
     
 def _process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
@@ -84,7 +86,7 @@ def _process_template_chi2_calculations(transition, frequency, flux, flux_uncert
     observed_transition = transition / (1 + dz)
 
     # Fit a gaussian template to the flux
-    params = calc_template_params(frequency, flux, observed_transition) # best fit
+    params, _ = calc_template_params(frequency, flux, observed_transition) # best fit
     
     # Calculate the flux of a perfect function fit
     flux_expected = gaussf(frequency, a=params[0], s=params[1], x0=observed_transition)

@@ -10,16 +10,19 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.wcs import WCS
 
-
 from zfinder.fits2flux import Fits2flux, wcs2pix
 from zfinder.template import template_zfind, find_lines, gaussf, calc_template_params
 from zfinder.fft import fft_zfind, double_damped_sinusoid, calc_fft_params, fft
 from zfinder.per_pixel import fft_per_pixel, template_per_pixel, \
     generate_square_pix_coords, generate_square_world_coords, get_all_flux
+from uncertainty import z_uncert
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
 
+font = {'family': 'serif', 'serif': ['cmr10']}
+plt.rc('font', **font)
+plt.rcParams['axes.unicode_minus'] = False
 class zfinder():
     """
     Doc string
@@ -62,8 +65,8 @@ class zfinder():
         plt.title(f'{title} $\chi^2_r$ = {round(min_chi2, 2)} @ z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Redshift', fontsize=15)
         plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
         plt.yscale('log')
         plt.savefig(f'{title.lower()}_chi2.png')
         plt.show()
@@ -71,37 +74,39 @@ class zfinder():
     def _plot_template_flux(self):
         """ Plot the template flux """
         x0 = self._transition/(1+self._best_z)
-        params = calc_template_params(self._frequency, self._flux, x0)
+        self._params, covars = calc_template_params(self._frequency, self._flux, x0)
+        self._p_err = np.sqrt(np.diag(covars)) # calculate the error on the parameters
         plt.figure(figsize=(15,7))
         plt.plot(self._frequency, np.zeros(len(self._frequency)), color='black', linestyle=(0, (5, 5)))
         plt.plot(self._frequency, self._flux, color='black', drawstyle='steps-mid')
-        plt.plot(self._frequency, gaussf(self._frequency, *params, x0), color='red')
+        plt.plot(self._frequency, gaussf(self._frequency, *self._params, x0), color='red')
         self._plot_sslf_lines()
         plt.margins(x=0)
         plt.fill_between(self._frequency, self._flux, 0, where=(np.array(self._flux) > 0), color='gold', alpha=0.75)
         plt.title(f'Template Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel(f'Frequency $({_unit_prefixes[self._freq_exp]}Hz)$', fontsize=15)
         plt.ylabel(f'Flux $({_unit_prefixes[self._flux_exp]}Jy)$', fontsize=15)
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
         plt.savefig('template_flux.png')
         plt.show()
     
     def _plot_fft_flux(self):
         """ Plot the fft flux """
-        params = calc_fft_params(self._transition, self._ffreq, 
+        self._params, covars = calc_fft_params(self._transition, self._ffreq, 
             self._fflux, self._best_z, self._frequency[0])
+        self._p_err = np.sqrt(np.diag(covars)) # calculate the error on the parameters
         plt.figure(figsize=(15,7))
         plt.plot(self._ffreq, self._fflux, color='black', drawstyle='steps-mid')
         plt.plot(self._ffreq, np.zeros(len(self._fflux)), color='black', linestyle=(0, (5, 5)))
-        plt.plot(self._ffreq, double_damped_sinusoid(self._ffreq, *params, 
+        plt.plot(self._ffreq, double_damped_sinusoid(self._ffreq, *self._params, 
             self._best_z, self._frequency[0], self._transition), color='red')
         plt.margins(x=0)
         plt.title(f'FFT Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Scale', fontsize=15)
         plt.ylabel('Amplitude', fontsize=15)
-        plt.xticks(fontsize=12)
-        plt.yticks(fontsize=12)
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15)
         plt.savefig('fft_flux.png')
         plt.show()   
 
@@ -138,11 +143,19 @@ class zfinder():
         return frequency, flux, flux_uncert, freq_exp, flux_exp
 
     @staticmethod
-    def _write_csv_rows(filename, data):
+    def _write_csv_rows(filename, mode, data):
         """ Doc string here """
-        with open(filename, 'w', newline='') as f:
+        with open(filename, mode, newline='') as f:
             wr = csv.writer(f)
             wr.writerows(data)
+            wr.writerow('')
+    
+    def _z_uncert(self, z, chi2, sigma):
+        """ Caclulate the uncertainty on the best fitting redshift """
+        peaks, _, _ = find_lines(self._flux)
+        reduced_sigma = sigma**2 / (len(self._flux) - 2*len(peaks) - 1)
+        neg, pos = z_uncert(z, chi2, reduced_sigma)
+        return neg, pos
 
     def template(self, z_start=0, dz=0.01, z_end=10):
         """ Doc string here """
@@ -160,6 +173,13 @@ class zfinder():
         # Plot the template chi2 and flux
         self._plot_chi2(title='Template')
         self._plot_template_flux()
+        
+        # Export csv
+        _, z_err = self._z_uncert(self._z, self._chi2, 1)
+        headings = ['z', 'z_err', 'amp', 'amp_err', 'std_dev', 'std_dev_err']
+        data = [round(self._best_z, self._round_to), round(z_err, self._round_to), self._params[0], self._p_err[0], self._params[1], self._p_err[1]]
+        self._write_csv_rows('template.csv', 'w', [headings, data])
+        self._write_csv_rows('template.csv', 'a', [['z', 'chi2'], *zip(self._z, self._chi2)])
 
     def template_pp(self, size, z_start=0, dz=0.01, z_end=10):
         """ 
@@ -175,7 +195,7 @@ class zfinder():
         frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
         z = template_per_pixel(self._transition, frequency, self._all_flux, self._flux_uncertainty, z_start, dz, z_end, size)
         
-        self._write_csv_rows('template_per_pixel.csv', z) # export redshifts to csv
+        self._write_csv_rows('template_per_pixel.csv', 'w', z) # export redshifts to csv
         self._plot_heatmap(z, title='Template') # Plot the template pp heatmap
 
     def fft(self, z_start=0, dz=0.01, z_end=10):
@@ -195,13 +215,19 @@ class zfinder():
 
         # Plot the fft chi2 and flux
         self._plot_chi2(title='FFT')
-        self._plot_fft_flux()     
+        self._plot_fft_flux()
+        
+        # Export csv
+        _, z_err = self._z_uncert(self._z, self._chi2, 1)
+        headings = ['z', 'z_err', 'amp', 'amp_err', 'std_dev', 'std_dev_err']
+        data = [round(self._best_z, self._round_to), round(z_err, self._round_to), self._params[0], self._p_err[0], self._params[1], self._p_err[1]]
+        self._write_csv_rows('fft.csv', 'w', [headings, data])
+        self._write_csv_rows('fft.csv', 'a', [['z', 'chi2'], *zip(self._z, self._chi2)]) 
 
     def fft_pp(self, size, z_start=0, dz=0.01, z_end=10):
         """ 
-        Performs the ffit redshift finding method in a square around the target ra and dec
+        Performs the fft redshift finding method in a square around the target ra and dec
         """
-
         self._size = size
         
         # If the other pp method has not been run, calculate all fluxes and uncertainties
@@ -212,7 +238,7 @@ class zfinder():
         frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
         z = fft_per_pixel(self._transition, frequency, self._all_flux, z_start, dz, z_end, size)
         
-        self._write_csv_rows('fft_per_pixel.csv', z) # export redshifts to csv
+        self._write_csv_rows('fft_per_pixel.csv', 'w', z) # export redshifts to csv
         self._plot_heatmap(z, title='FFT') # Plot the fft pp heatmap
 
 # Get the prefix of a unit from an exponent
@@ -242,7 +268,7 @@ def main():
     aperture_radius = 3
     transition = 115.2712
     
-    size = 3
+    size = 5
     z_start = 5.5
     dz = 0.001
     z_end = 5.6
