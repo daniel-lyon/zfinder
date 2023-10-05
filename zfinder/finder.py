@@ -4,16 +4,17 @@ Doc string
 
 import csv
 import warnings
+from itertools import zip_longest
 
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 from astropy.wcs import WCS
 
-from zfinder.fits2flux import Fits2flux, wcs2pix
-from zfinder.template import template_zfind, find_lines, gaussf, calc_template_params
-from zfinder.fft import fft_zfind, double_damped_sinusoid, calc_fft_params, fft
-from zfinder.per_pixel import fft_per_pixel, template_per_pixel, \
+from fits2flux import Fits2flux, wcs2pix
+from template import template_zfind, find_lines, gaussf, calc_template_params
+from fft import fft_zfind, double_damped_sinusoid, calc_fft_params, fft
+from per_pixel import fft_per_pixel, template_per_pixel, \
     generate_square_pix_coords, generate_square_world_coords, get_all_flux
 from uncertainty import z_uncert
 
@@ -23,6 +24,11 @@ warnings.filterwarnings("ignore", message="divide by zero encountered in divide"
 font = {'family': 'serif', 'serif': ['cmr10']}
 plt.rc('font', **font)
 plt.rcParams['axes.unicode_minus'] = False
+
+# TODO: Make per_pixel take aperture_radius and automatically adjust spacing
+# TODO: Test SPT sources
+# TODO: Fix per pixel plots cutting off the y axis label
+# TODO: Update log y axis ticks so font can be bigger. Move the power to the top left of the plot or something
 class zfinder():
     """
     Doc string
@@ -150,6 +156,33 @@ class zfinder():
             wr.writerows(data)
             wr.writerow('')
     
+    def _export_method_data(self, filename, sigma):
+        """ Export template/fft csv data"""
+        # Get the results
+        z_low_err, z_up_err = self._z_uncert(self._z, self._chi2, sigma)
+        results = [[round(z_low_err, self._round_to)], [round(self._best_z, self._round_to)], 
+            [round(z_up_err, self._round_to)], [self._params[0]], [self._p_err[0]], [self._params[1]], [self._p_err[1]]]
+        exponents = [[self._freq_exp], [self._flux_exp]]   
+        
+        # Get the headings and data for the template
+        if filename == 'template.csv':
+            headings = ['z_low_err', 'z', 'z_err', 'amp', 'amp_err', 'std_dev', 
+                'std_dev_err', 'dz', 'chi2_r', 'freq', 'flux', 'flux_uncert', 'freq_exp', 'flux_exp']
+            data = [*zip_longest(*results, self._z, self._chi2, self._frequency, 
+                self._flux, self._flux_uncert, *exponents, fillvalue='')]
+        
+        # Get the headings and data for the fft
+        elif filename == 'fft.csv':
+            headings = ['z_low_err', 'z', 'z_err', 'amp', 'amp_err', 'std_dev',
+                'std_dev_err', 'dz', 'chi2_r', 'ffreq', 'fflux']
+            data = [*zip_longest(*results, self._z, self._chi2, self._ffreq, self._fflux, fillvalue='')]
+        
+        # Write the data to the csv
+        with open(filename, 'w', newline='') as f:
+            wr = csv.writer(f)
+            wr.writerow(headings)
+            wr.writerows(data)
+            
     def _z_uncert(self, z, chi2, sigma):
         """ Caclulate the uncertainty on the best fitting redshift """
         peaks, _, _ = find_lines(self._flux)
@@ -157,7 +190,7 @@ class zfinder():
         neg, pos = z_uncert(z, chi2, reduced_sigma)
         return neg, pos
 
-    def template(self, z_start=0, dz=0.01, z_end=10):
+    def template(self, z_start=0, dz=0.01, z_end=10, sigma=1):
         """ Doc string here """
         self._dz = dz
 
@@ -173,13 +206,7 @@ class zfinder():
         # Plot the template chi2 and flux
         self._plot_chi2(title='Template')
         self._plot_template_flux()
-        
-        # Export csv
-        _, z_err = self._z_uncert(self._z, self._chi2, 1)
-        headings = ['z', 'z_err', 'amp', 'amp_err', 'std_dev', 'std_dev_err']
-        data = [round(self._best_z, self._round_to), round(z_err, self._round_to), self._params[0], self._p_err[0], self._params[1], self._p_err[1]]
-        self._write_csv_rows('template.csv', 'w', [headings, data])
-        self._write_csv_rows('template.csv', 'a', [['z', 'chi2'], *zip(self._z, self._chi2)])
+        self._export_method_data('template.csv', sigma)
 
     def template_pp(self, size, z_start=0, dz=0.01, z_end=10):
         """ 
@@ -198,7 +225,7 @@ class zfinder():
         self._write_csv_rows('template_per_pixel.csv', 'w', z) # export redshifts to csv
         self._plot_heatmap(z, title='Template') # Plot the template pp heatmap
 
-    def fft(self, z_start=0, dz=0.01, z_end=10):
+    def fft(self, z_start=0, dz=0.01, z_end=10, sigma=1):
         """ Doc string here """
         self._dz = dz
 
@@ -216,13 +243,7 @@ class zfinder():
         # Plot the fft chi2 and flux
         self._plot_chi2(title='FFT')
         self._plot_fft_flux()
-        
-        # Export csv
-        _, z_err = self._z_uncert(self._z, self._chi2, 1)
-        headings = ['z', 'z_err', 'amp', 'amp_err', 'std_dev', 'std_dev_err']
-        data = [round(self._best_z, self._round_to), round(z_err, self._round_to), self._params[0], self._p_err[0], self._params[1], self._p_err[1]]
-        self._write_csv_rows('fft.csv', 'w', [headings, data])
-        self._write_csv_rows('fft.csv', 'a', [['z', 'chi2'], *zip(self._z, self._chi2)]) 
+        self._export_method_data('fft.csv', sigma) 
 
     def fft_pp(self, size, z_start=0, dz=0.01, z_end=10):
         """ 
