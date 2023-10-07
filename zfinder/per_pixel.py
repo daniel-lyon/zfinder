@@ -21,19 +21,20 @@ def radec2str(ra, dec):
     dec = Angle(dec, unit=u.degree).to_string(unit=u.degree, sep=':', precision=4)
     return ra, dec
 
-def generate_square_pix_coords(size, target_x, target_y):
+def generate_square_pix_coords(size, target_x, target_y, aperture_radius):
     """ Generate a list of coordinates for a square of pixel coordinates around a target pixels """
     matrix = np.arange(size) - size//2
+    matrix = matrix * aperture_radius * 2
     x, y = np.meshgrid(matrix + target_x, matrix + target_y)
     x, y = x.ravel(), y.ravel()
     return x, y
 
-def generate_square_world_coords(fitsfile, ra, dec, size):
+def generate_square_world_coords(fitsfile, ra, dec, size, aperture_radius):
     """ Generate a list of coordinates for a square of ra & dec around a target ra & dec """
     # Generate x, y pix coordinates around target ra & dec
     hdr = fits.getheader(fitsfile)
     target_pix_ra_dec = wcs2pix(ra, dec, hdr)
-    x, y = generate_square_pix_coords(size, *target_pix_ra_dec)
+    x, y = generate_square_pix_coords(size, *target_pix_ra_dec, aperture_radius)
 
     # Convert x, y pix coordinates to world ra and dec
     wcs = WCS(hdr, naxis=2)
