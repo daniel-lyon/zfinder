@@ -21,14 +21,16 @@ from uncertainty import z_uncert
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
 
-font = {'family': 'serif', 'serif': ['cmr10']}
-plt.rc('font', **font)
-plt.rcParams['axes.unicode_minus'] = False
+plt.rcParams['font.family'] = 'serif'
+plt.rcParams['font.serif'] = ['Cambria']
+plt.rcParams['mathtext.fontset'] = 'custom'
+plt.rcParams['mathtext.rm'] = 'Cambria'
+plt.rcParams['mathtext.it'] = 'Cambria:italic'
+plt.rcParams['mathtext.bf'] = 'Cambria:bold'
+plt.rcParams['axes.formatter.use_mathtext'] = True
 
-# TODO: Make per_pixel take aperture_radius and automatically adjust spacing
-# TODO: Test SPT sources
-# TODO: Fix per pixel plots cutting off the y axis label
-# TODO: Update log y axis ticks so font can be bigger. Move the power to the top left of the plot or something
+# TODO: Add uncertainty for fft
+
 class zfinder():
     """
     Doc string
@@ -116,7 +118,7 @@ class zfinder():
         plt.savefig('fft_flux.png')
         plt.show()   
 
-    def _plot_heatmap(self, z, title):
+    def _plot_heatmap(self, z, title, aperture_radius):
         # Calculate the velocities
         target_z = np.take(z, z.size // 2) # redshift of the target ra and dec
         velocities = 3*10**5*((((1 + target_z)**2 - 1) / ((1 + target_z)**2 + 1)) - (((1 + z)**2 - 1) / ((1 + z)**2 + 1))) # km/s
@@ -125,7 +127,7 @@ class zfinder():
         # Need to get x and y coordinates to plot the heatmap with bounds for correct ra and dec
         hdr = fits.getheader(self._fitsfile)
         target_pix_ra_dec = wcs2pix(self._ra, self._dec, hdr)
-        x, y = generate_square_pix_coords(self._size, *target_pix_ra_dec)
+        x, y = generate_square_pix_coords(self._size, *target_pix_ra_dec, aperture_radius)
 
         # velocities = np.flipud(velocities)
         w = WCS(hdr, naxis=2)
@@ -133,10 +135,14 @@ class zfinder():
         hm = plt.imshow(velocities, cmap='bwr', interpolation='nearest', vmin=-scale_velo, vmax=scale_velo,
                 extent=[x[0], x[-1], y[0], y[-1]],  
                 origin='lower')
-        plt.colorbar(hm, label='km/s')
-        plt.title(f'{title} Per Pixel')
+        cbar = plt.colorbar(hm)
+        cbar.ax.set_ylabel('km/s', fontsize=15)
+        cbar.ax.tick_params(labelsize=15)
+        plt.title(f'{title} Per Pixel', fontsize=15)
         plt.xlabel('RA', fontsize=15)      
-        plt.ylabel('DEC', fontsize=15)      
+        plt.ylabel('DEC', fontsize=15)   
+        plt.xticks(fontsize=15)
+        plt.yticks(fontsize=15) 
         plt.savefig(f'{title.lower()}_per_pixel.png')
         plt.show()         
 
@@ -166,14 +172,14 @@ class zfinder():
         
         # Get the headings and data for the template
         if filename == 'template.csv':
-            headings = ['z_low_err', 'z', 'z_err', 'amp', 'amp_err', 'std_dev', 
+            headings = ['z_low_err', 'z', 'z_up_err', 'amp', 'amp_err', 'std_dev', 
                 'std_dev_err', 'dz', 'chi2_r', 'freq', 'flux', 'flux_uncert', 'freq_exp', 'flux_exp']
             data = [*zip_longest(*results, self._z, self._chi2, self._frequency, 
                 self._flux, self._flux_uncert, *exponents, fillvalue='')]
         
         # Get the headings and data for the fft
         elif filename == 'fft.csv':
-            headings = ['z_low_err', 'z', 'z_err', 'amp', 'amp_err', 'std_dev',
+            headings = ['z_low_err', 'z', 'z_up_err', 'amp', 'amp_err', 'std_dev',
                 'std_dev_err', 'dz', 'chi2_r', 'ffreq', 'fflux']
             data = [*zip_longest(*results, self._z, self._chi2, self._ffreq, self._fflux, fillvalue='')]
         
@@ -208,7 +214,7 @@ class zfinder():
         self._plot_template_flux()
         self._export_method_data('template.csv', sigma)
 
-    def template_pp(self, size, z_start=0, dz=0.01, z_end=10):
+    def template_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5):
         """ 
         Performs the template redshift finding method in a square around the target ra and dec
         """
@@ -216,14 +222,14 @@ class zfinder():
 
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
-            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size)
-            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, self._aperture_radius)
+            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size, aperture_radius_pp)
+            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, aperture_radius_pp)
 
-        frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
+        frequency = Fits2flux(self._fitsfile, self._ra, self._dec, aperture_radius_pp).get_freq()
         z = template_per_pixel(self._transition, frequency, self._all_flux, self._flux_uncertainty, z_start, dz, z_end, size)
         
         self._write_csv_rows('template_per_pixel.csv', 'w', z) # export redshifts to csv
-        self._plot_heatmap(z, title='Template') # Plot the template pp heatmap
+        self._plot_heatmap(z, title='Template', aperture_radius=aperture_radius_pp) # Plot the template pp heatmap
 
     def fft(self, z_start=0, dz=0.01, z_end=10, sigma=1):
         """ Doc string here """
@@ -245,7 +251,7 @@ class zfinder():
         self._plot_fft_flux()
         self._export_method_data('fft.csv', sigma) 
 
-    def fft_pp(self, size, z_start=0, dz=0.01, z_end=10):
+    def fft_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5):
         """ 
         Performs the fft redshift finding method in a square around the target ra and dec
         """
@@ -253,14 +259,14 @@ class zfinder():
         
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
-            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size)
-            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, self._aperture_radius)
+            all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size, aperture_radius_pp)
+            self._all_flux, self._flux_uncertainty = get_all_flux(self._fitsfile, all_ra, all_dec, aperture_radius_pp)
         
-        frequency = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius).get_freq()
+        frequency = Fits2flux(self._fitsfile, self._ra, self._dec, aperture_radius_pp).get_freq()
         z = fft_per_pixel(self._transition, frequency, self._all_flux, z_start, dz, z_end, size)
         
         self._write_csv_rows('fft_per_pixel.csv', 'w', z) # export redshifts to csv
-        self._plot_heatmap(z, title='FFT') # Plot the fft pp heatmap
+        self._plot_heatmap(z, title='FFT', aperture_radius=aperture_radius_pp) # Plot the fft pp heatmap
 
 # Get the prefix of a unit from an exponent
 _unit_prefixes = {
@@ -281,24 +287,3 @@ _unit_prefixes = {
     18 : 'E', 
     21 : 'Z',
     24 : 'Y'}
-
-def main():
-    fitsfile = 'zfinder/0856_cube_c0.4_nat_80MHz_taper3.fits'
-    ra = '08:56:14.8'
-    dec = '02:24:00.6'
-    aperture_radius = 3
-    transition = 115.2712
-    
-    size = 5
-    z_start = 5.5
-    dz = 0.001
-    z_end = 5.6
-
-    source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
-    source.template(z_start, dz, z_end)
-    source.fft(z_start, dz, z_end)
-    # source.fft_pp(size, z_start, dz, z_end)
-    # source.template_pp(size, z_start, dz, z_end)
-
-if __name__ == '__main__':
-    main()
