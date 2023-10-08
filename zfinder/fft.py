@@ -77,7 +77,31 @@ def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     reduced_chi2 = chi2 / (len(fflux_obs) - 2*len(gauss_peaks) - 1)
     return reduced_chi2
 
-def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose=True):
+def _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
+    """ Doc here """
+    if verbose:
+        print('Calculating FFT fit chi-squared values...')
+    pool = Pool()
+    jobs = [pool.apply_async(process_fft_chi2_calculations, 
+        (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
+    pool.close()
+
+    # Parse results
+    chi2 = []
+    for res in tqdm(jobs, disable=not verbose):
+        chi2.append(res.get())    
+    return chi2
+
+def _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
+    """ Doc here """
+    if verbose:
+        print('Calculating FFT fit chi-squared values...')
+    chi2 = []
+    for dz in tqdm(z, disable=not verbose):
+        chi2.append(process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, frequency[0]))
+    return chi2
+
+def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
     """ 
     Finds the best redshift by performing the fast fourier transform on the flux data. The
     chi-squared is caclulated at every redshift by iterating through delta-z. The most 
@@ -113,15 +137,8 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose
     ffreq, fflux = fft(frequency, flux)
 
     # Parallelise the chi2 calculations
-    if verbose:
-        print('Calculating FFT fit chi-squared values...')
-    pool = Pool()
-    jobs = [pool.apply_async(process_fft_chi2_calculations, 
-        (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
-    pool.close()
-
-    # Parse results
-    chi2 = []
-    for res in tqdm(jobs, disable=not verbose):
-        chi2.append(res.get())    
+    if parallel:
+        chi2 = _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
+    else:
+        chi2 = _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
     return z, chi2

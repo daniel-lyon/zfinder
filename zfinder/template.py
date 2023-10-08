@@ -78,7 +78,7 @@ def find_lines(flux):
 def calc_template_params(frequency, flux, observed_transition):
     params, covars = curve_fit(lambda x, a, s: gaussf(x, a, s, x0=observed_transition), 
         frequency, flux, bounds=[[0, (1/8)], [2*max(flux), (2/3)]], absolute_sigma=True)
-    return params, covars
+    return params, covars    
     
 def _process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz):
     """ Use multiprocessing to significantly speed up chi2 calculations """
@@ -99,7 +99,31 @@ def _process_template_chi2_calculations(transition, frequency, flux, flux_uncert
     reduced_chi2 = _calc_reduced_chi2(flux, flux_expected, flux_uncertainty, gauss_lines) * multiplier
     return reduced_chi2
 
-def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True):
+def _mp_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=True):
+    """ Doc here """
+    if verbose:
+        print('Calculating Template fit chi-squared values...')
+    pool = Pool()
+    jobs = [pool.apply_async(_process_template_chi2_calculations, 
+        (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
+    pool.close()
+
+    # Parse results
+    chi2 = []
+    for result in tqdm(jobs, disable=not verbose):
+        chi2.append(result.get())
+    return z, chi2
+
+def _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=True):
+    """ Doc here """
+    if verbose:
+        print('Calculating Template fit chi-squared values...')
+    chi2 = []
+    for dz in tqdm(z, disable=not verbose):
+        chi2.append(_process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz))
+    return z, chi2
+
+def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
     """
     Using the gaussian template shifting method, calculate the reduced chi-squared at every change
     in redshift.
@@ -140,15 +164,8 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
 
     # Parallelise slow loop to execute much faster
-    if verbose:
-        print('Calculating Template fit chi-squared values...')
-    pool = Pool()
-    jobs = [pool.apply_async(_process_template_chi2_calculations, 
-        (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
-    pool.close()
-
-    # Parse results
-    chi2 = []
-    for result in tqdm(jobs, disable=not verbose):
-        chi2.append(result.get())
+    if parallel:
+        chi2 = _mp_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=verbose)
+    else:
+        chi2 = _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=verbose)
     return z, chi2

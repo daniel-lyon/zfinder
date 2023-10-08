@@ -120,7 +120,7 @@ class Fits2flux():
         beam_area = 1.1331 * bmaj * bmin
         return beam_area
     
-    def _process_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
+    def _mp_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
         """ Process the flux arrays using multiprocessing """
         if verbose:
             print('Calculating flux values...')
@@ -138,6 +138,19 @@ class Fits2flux():
             flux_uncert.append(u)
         
         # Convert to np arrays
+        flux = np.array(flux)
+        flux_uncert = np.array(flux_uncert)
+        return flux, flux_uncert
+    
+    def _serial_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
+        """ Process the flux arrays serially """
+        if verbose:
+            print('Calculating flux values...')
+        flux, flux_uncert = [], []
+        for channel in tqdm(self._data, disable=not verbose):
+            f, u = _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, beam_area)
+            flux.append(f)
+            flux_uncert.append(u)
         flux = np.array(flux)
         flux_uncert = np.array(flux_uncert)
         return flux, flux_uncert
@@ -165,7 +178,7 @@ class Fits2flux():
         frequency = frequency / 10**self._freq_exponent
         return frequency
 
-    def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1, verbose=True):
+    def get_flux(self, bkg_radius=(50, 50), beam_tolerance=1, verbose=True, parallel=True):
         """ 
         For every frequency channel, find the flux and associated uncertainty at a position
 
@@ -200,7 +213,10 @@ class Fits2flux():
         annulus = CircularAnnulus(position, inner_radius, outter_radius)
 
         # Process the flux arrays
-        flux, flux_uncert = self._process_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area, verbose)
+        if parallel:
+            flux, flux_uncert = self._mp_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area, verbose)
+        else:
+            flux, flux_uncert = self._serial_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area, verbose)
 
         # Average zeroes so there isn't div by zero error later
         flux_uncert = average_zeroes(flux_uncert)

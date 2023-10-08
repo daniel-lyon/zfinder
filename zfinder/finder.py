@@ -30,13 +30,14 @@ plt.rcParams['mathtext.bf'] = 'Cambria:bold'
 plt.rcParams['axes.formatter.use_mathtext'] = True
 
 # TODO: Add uncertainty for fft
+# TODO: change multiiprocessing for pp methods to use outer loop of redshift calculations
 
 class zfinder():
     """
     Doc string
     """
 
-    def __init__(self, fitsfile, ra, dec, aperture_radius, transition, bkg_radius=(50,50), beam_tolerance=1):
+    def __init__(self, fitsfile, ra, dec, aperture_radius, transition, bkg_radius=(50,50), beam_tolerance=1, flux_parallel=True):
         self._fitsfile = fitsfile
         self._ra = ra
         self._dec = dec
@@ -44,6 +45,7 @@ class zfinder():
         self._transition = transition
         self._bkg_radius = bkg_radius
         self._beam_tolerance = beam_tolerance
+        self._flux_parallel = flux_parallel
 
         # Ignore warnings
         warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
@@ -143,6 +145,7 @@ class zfinder():
         plt.ylabel('DEC', fontsize=15)   
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15) 
+        plt.tight_layout()
         plt.savefig(f'{title.lower()}_per_pixel.png')
         plt.show()         
 
@@ -150,7 +153,7 @@ class zfinder():
         """ Calculate the frequency and flux """
         _f2f_instance = Fits2flux(self._fitsfile, self._ra, self._dec, self._aperture_radius)
         frequency = _f2f_instance.get_freq()
-        flux, flux_uncert = _f2f_instance.get_flux(self._bkg_radius, self._beam_tolerance)
+        flux, flux_uncert = _f2f_instance.get_flux(self._bkg_radius, self._beam_tolerance, parallel=self._flux_parallel)
         freq_exp, flux_exp = _f2f_instance.get_exponents()
         return frequency, flux, flux_uncert, freq_exp, flux_exp
 
@@ -196,7 +199,7 @@ class zfinder():
         neg, pos = z_uncert(z, chi2, reduced_sigma)
         return neg, pos
 
-    def template(self, z_start=0, dz=0.01, z_end=10, sigma=1):
+    def template(self, z_start=0, dz=0.01, z_end=10, sigma=1, verbose=True, parallel=True):
         """ Doc string here """
         self._dz = dz
 
@@ -207,7 +210,7 @@ class zfinder():
 
         # Calculate the template chi2
         self._z, self._chi2 = template_zfind(self._transition, 
-            self._frequency, self._flux, self._flux_uncert, z_start, dz, z_end)
+            self._frequency, self._flux, self._flux_uncert, z_start, dz, z_end, verbose, parallel)
 
         # Plot the template chi2 and flux
         self._plot_chi2(title='Template')
@@ -231,7 +234,7 @@ class zfinder():
         self._write_csv_rows('template_per_pixel.csv', 'w', z) # export redshifts to csv
         self._plot_heatmap(z, title='Template', aperture_radius=aperture_radius_pp) # Plot the template pp heatmap
 
-    def fft(self, z_start=0, dz=0.01, z_end=10, sigma=1):
+    def fft(self, z_start=0, dz=0.01, z_end=10, sigma=1, verbose=True, parallel=True):
         """ Doc string here """
         self._dz = dz
 
@@ -244,7 +247,7 @@ class zfinder():
         self._ffreq, self._fflux = fft(self._frequency, self._flux)
 
         # Calculate the fft chi2
-        self._z, self._chi2 = fft_zfind(self._transition, self._frequency, self._flux, z_start, dz, z_end)
+        self._z, self._chi2 = fft_zfind(self._transition, self._frequency, self._flux, z_start, dz, z_end, verbose, parallel)
 
         # Plot the fft chi2 and flux
         self._plot_chi2(title='FFT')
