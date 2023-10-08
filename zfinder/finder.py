@@ -30,7 +30,6 @@ plt.rcParams['mathtext.bf'] = 'Cambria:bold'
 plt.rcParams['axes.formatter.use_mathtext'] = True
 
 # TODO: Add uncertainty for fft
-# TODO: change multiiprocessing for pp methods to use outer loop of redshift calculations
 
 class zfinder():
     """
@@ -169,8 +168,8 @@ class zfinder():
         """ Export template/fft csv data"""
         # Get the results
         z_low_err, z_up_err = self._z_uncert(self._z, self._chi2, sigma)
-        results = [[round(z_low_err, self._round_to)], [round(self._best_z, self._round_to)], 
-            [round(z_up_err, self._round_to)], [self._params[0]], [self._p_err[0]], [self._params[1]], [self._p_err[1]]]
+        results = [[z_low_err], [round(self._best_z, self._round_to)], 
+            [z_up_err], [self._params[0]], [self._p_err[0]], [self._params[1]], [self._p_err[1]]]
         exponents = [[self._freq_exp], [self._flux_exp]]   
         
         # Get the headings and data for the template

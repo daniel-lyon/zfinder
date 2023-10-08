@@ -6,6 +6,7 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.coordinates import Angle
+from multiprocessing import Pool
 
 from zfinder.fits2flux import Fits2flux, wcs2pix
 from zfinder.fft import fft_zfind
@@ -42,13 +43,23 @@ def generate_square_world_coords(fitsfile, ra, dec, size, aperture_radius):
     ra, dec = radec2str(ra, dec)
     return ra, dec
 
+def _mp_all_flux(fitsfile, ra, dec, aperture_radius):
+    """ Get the flux values for all ra and dec coordinates """
+    flux, flux_uncert = Fits2flux(fitsfile, ra, dec, aperture_radius).get_flux(verbose=False, parallel=False)
+    return flux, flux_uncert
+
 def get_all_flux(fitsfile, ra, dec, aperture_radius):
     """ Get the flux values for all ra and dec coordinates """
+    
     print('Calculating all flux values...')
+    pool = Pool()
+    jobs = [pool.apply_async(_mp_all_flux, (fitsfile, r, d, aperture_radius)) for r, d in zip(ra, dec)]
+    pool.close()
+    
     all_flux = []
     all_uncert = []
-    for r, d in tqdm(zip(ra, dec), total=len(ra)):
-        flux, flux_uncert = Fits2flux(fitsfile, r, d, aperture_radius).get_flux(verbose=False)
+    for res in tqdm(jobs):
+        flux, flux_uncert = res.get()
         all_flux.append(flux)
         all_uncert.append(flux_uncert)
     return all_flux, all_uncert
@@ -57,9 +68,15 @@ def fft_per_pixel(transition, frequency, all_flux, z_start=0, dz=0.01, z_end=10,
     """ Doc string here """
     # Calculate the chi-squared values
     print('Calculating all FFT fit chi-squared values...')
+    verbose, parallel = False, False
+    pool = Pool()
+    jobs = [pool.apply_async(fft_zfind, (transition, frequency, flux, z_start, dz, z_end, verbose, parallel)) for flux in all_flux]
+    pool.close()
+    
+    # Parse results
     all_z = []
-    for flux in tqdm(all_flux):
-        z, chi2 = fft_zfind(transition, frequency, flux, z_start, dz, z_end, verbose=False)
+    for res in tqdm(jobs):
+        z, chi2 = res.get()
         all_z.append(z[np.argmin(chi2)])
 
     # Reshape the array
@@ -70,9 +87,16 @@ def template_per_pixel(transition, frequency, all_flux, all_flux_uncertainty, z_
     """ Doc string here """
     # Calculate the chi-squared values
     print('Calculating all Template fit chi-squared values...')
+    verbose, parallel = False, False
+    pool = Pool()
+    jobs = [pool.apply_async(template_zfind, (transition, frequency, flux, flux_uncert, z_start, dz, z_end, verbose, parallel)) 
+        for flux, flux_uncert in zip(all_flux, all_flux_uncertainty)]
+    pool.close()
+    
+    # Parse results
     all_z = []
-    for flux, uncertainty in tqdm(zip(all_flux, all_flux_uncertainty), total=len(all_flux)):
-        z, chi2 = template_zfind(transition, frequency, flux, uncertainty, z_start, dz, z_end, verbose=False)
+    for res in tqdm(jobs):
+        z, chi2 = res.get()
         all_z.append(z[np.argmin(chi2)])
 
     # Reshape the array

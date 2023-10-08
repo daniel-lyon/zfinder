@@ -112,7 +112,7 @@ def _mp_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_li
     chi2 = []
     for result in tqdm(jobs, disable=not verbose):
         chi2.append(result.get())
-    return z, chi2
+    return chi2
 
 def _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=True):
     """ Doc here """
@@ -121,7 +121,7 @@ def _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, ssl
     chi2 = []
     for dz in tqdm(z, disable=not verbose):
         chi2.append(_process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz))
-    return z, chi2
+    return chi2
 
 def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
     """
