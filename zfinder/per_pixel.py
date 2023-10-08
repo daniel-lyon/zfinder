@@ -48,12 +48,12 @@ def _mp_all_flux(fitsfile, ra, dec, aperture_radius):
     flux, flux_uncert = Fits2flux(fitsfile, ra, dec, aperture_radius).get_flux(verbose=False, parallel=False)
     return flux, flux_uncert
 
-def get_all_flux(fitsfile, ra, dec, aperture_radius):
+def get_all_flux(fitsfile, all_ra, all_dec, aperture_radius):
     """ Get the flux values for all ra and dec coordinates """
     
     print('Calculating all flux values...')
     pool = Pool()
-    jobs = [pool.apply_async(_mp_all_flux, (fitsfile, r, d, aperture_radius)) for r, d in zip(ra, dec)]
+    jobs = [pool.apply_async(_mp_all_flux, (fitsfile, r, d, aperture_radius)) for r, d in zip(all_ra, all_dec)]
     pool.close()
     
     all_flux = []
