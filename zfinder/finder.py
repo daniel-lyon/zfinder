@@ -59,9 +59,11 @@ class zfinder():
         for i, line in enumerate(peaks):
             x = self._frequency[line]
             y = self._flux[line]
-            plt.plot(x, y, 'bo')
+            plot, = plt.plot(x, y, 'bo')
             plt.text(x, y+text_offset_high, f'snr={snrs[i]}', color='blue')
             plt.text(x, y+text_offset_low, f'scale={scales[i]}', color='blue')
+            if i == 0:
+                plot.set_label('Lines')
     
     def _plot_chi2(self, title):
         """ Plot the chi-sqaured vs redshift """
@@ -69,14 +71,15 @@ class zfinder():
         self._best_z = self._z[np.argmin(self._chi2)]
         self._round_to = len(str(self._dz).split('.')[1])
         plt.figure(figsize=(15,7))
-        plt.plot(self._z, self._chi2, color='black')
-        plt.plot(self._best_z, min_chi2, 'bo', markersize=5)
+        plt.plot(self._z, self._chi2, color='black', label='$\chi^2_r$')
+        plt.plot(self._best_z, min_chi2, 'bo', markersize=5, label='Best Fit')
         plt.title(f'{title} $\chi^2_r$ = {round(min_chi2, 2)} @ z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Redshift', fontsize=15)
         plt.ylabel('$\chi^2_r$', x=0.01, fontsize=15)
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15)
         plt.yscale('log')
+        plt.legend()
         plt.savefig(f'{title.lower()}_chi2.png')
         plt.show()
 
@@ -88,15 +91,16 @@ class zfinder():
         plt.figure(figsize=(15,7))
         plt.plot(self._frequency, np.zeros(len(self._frequency)), color='black', linestyle=(0, (5, 5)))
         plt.plot(self._frequency, self._flux, color='black', drawstyle='steps-mid')
-        plt.plot(self._frequency, gaussf(self._frequency, *self._params, x0), color='red')
+        plt.plot(self._frequency, gaussf(self._frequency, *self._params, x0), color='red', label='Template Fit')
         self._plot_sslf_lines()
         plt.margins(x=0)
-        plt.fill_between(self._frequency, self._flux, 0, where=(np.array(self._flux) > 0), color='gold', alpha=0.75)
+        plt.fill_between(self._frequency, self._flux, 0, where=(np.array(self._flux) > 0), color='gold', alpha=0.75, label='Aperture Flux')
         plt.title(f'Template Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel(f'Frequency $({_unit_prefixes[self._freq_exp]}Hz)$', fontsize=15)
         plt.ylabel(f'Flux $({_unit_prefixes[self._flux_exp]}Jy)$', fontsize=15)
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15)
+        plt.legend()
         plt.savefig('template_flux.png')
         plt.show()
     
@@ -106,16 +110,17 @@ class zfinder():
             self._fflux, self._best_z, self._frequency[0])
         self._p_err = np.sqrt(np.diag(covars)) # calculate the error on the parameters
         plt.figure(figsize=(15,7))
-        plt.plot(self._ffreq, self._fflux, color='black', drawstyle='steps-mid')
+        plt.plot(self._ffreq, self._fflux, color='black', drawstyle='steps-mid', label='FFT Flux')
         plt.plot(self._ffreq, np.zeros(len(self._fflux)), color='black', linestyle=(0, (5, 5)))
         plt.plot(self._ffreq, double_damped_sinusoid(self._ffreq, *self._params, 
-            self._best_z, self._frequency[0], self._transition), color='red')
+            self._best_z, self._frequency[0], self._transition), color='red', label='FFT Fit')
         plt.margins(x=0)
         plt.title(f'FFT Fit z={round(self._best_z, self._round_to)}', fontsize=15)
         plt.xlabel('Scale', fontsize=15)
         plt.ylabel('Amplitude', fontsize=15)
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15)
+        plt.legend()
         plt.savefig('fft_flux.png')
         plt.show()   
 
