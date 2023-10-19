@@ -9,54 +9,10 @@ import numpy as np
 from tqdm import tqdm
 from radio_beam import Beam
 from astropy.io import fits
-from astropy.wcs import WCS
-from astropy import units as u
-from astropy.coordinates import SkyCoord, Angle
 from photutils.background import Background2D
 from photutils.aperture import CircularAperture, CircularAnnulus, ApertureStats, aperture_photometry
 
-def wcs2pix(ra, dec, hdr):
-    """ Convert RA, DEC to x, y pixel coordinates """
-    # Get the RA & DEC in degrees
-    c = SkyCoord(ra, dec, unit=(u.hourangle, u.degree))
-    ra = Angle(c.ra).degree
-    dec = Angle(c.dec).degree
-
-    # Convert RA & DEC to pixel world coordinates
-    wcs = WCS(hdr, naxis=2)
-    x, y = wcs.all_world2pix(ra, dec, 1)
-    return [x, y]
-
-def get_sci_exponent(number):
-    """ Find the scientific exponent of a number """
-    abs_num = np.abs(number)
-    base = np.log10(abs_num)  # Log rules to find exponent
-    exponent = int(np.floor(base))  # convert to floor integer
-    return exponent
-
-def get_eng_exponent(number):
-    """ 
-    Find the nearest power of 3 (lower). In engineering format,
-    exponents are multiples of 3.
-    """
-    exponent = get_sci_exponent(number)  # Get scientific exponent
-    for i in range(3):
-        if exponent > 0:
-            unit = exponent-i
-        else:
-            unit = exponent+i
-        if unit % 3 == 0:  # If multiple of 3, return it
-            return unit
-
-def average_zeroes(array):
-    """ Average zeroes with left & right values in a list """
-    for i, val in enumerate(array):
-        if val == 0:
-            try:
-                array[i] = (array[i-1] + array[i+1])/2
-            except IndexError:
-                array[i] = (array[i-2] + array[i-1])/2
-    return array
+from utils import wcs2pix, get_eng_exponent, average_zeroes
 
 class Fits2flux():
     """
@@ -122,30 +78,16 @@ class Fits2flux():
     
     def _mp_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
         """ Process the flux arrays using multiprocessing """
-        if verbose:
-            print('Calculating flux values...')
-        pool = Pool()
-        jobs = [pool.apply_async(_process_channel_data, 
-            (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) for channel in self._data]
-        pool.close()
-
-        # Parse results
-        flux = []
-        flux_uncert = []
-        for res in tqdm(jobs, disable=not verbose):
-            f, u = res.get()
-            flux.append(f)
-            flux_uncert.append(u)
-        
-        # Convert to np arrays
-        flux = np.array(flux)
-        flux_uncert = np.array(flux_uncert)
-        return flux, flux_uncert
+        with Pool() as pool:
+            jobs = [pool.apply_async(_process_channel_data, 
+                    (channel, aperture, annulus, bkg_radius, pix2deg, beam_area)) 
+                    for channel in self._data]
+            results = [res.get() for res in tqdm(jobs, disable=not verbose)]
+        flux, flux_uncert = zip(*results)
+        return np.array(flux), np.array(flux_uncert)
     
     def _serial_flux_jobs(self, aperture, annulus, bkg_radius, pix2deg, beam_area, verbose):
         """ Process the flux arrays serially """
-        if verbose:
-            print('Calculating flux values...')
         flux, flux_uncert = [], []
         for channel in tqdm(self._data, disable=not verbose):
             f, u = _process_channel_data(channel, aperture, annulus, bkg_radius, pix2deg, beam_area)
@@ -157,12 +99,7 @@ class Fits2flux():
 
     def get_freq(self):
         """ 
-        Caclulate the frequency axis (x-axis) of the flux
-
-        Returns
-        -------
-        frequency : list
-            A list of frequencies corresponding to individual channels of a .fits image
+        Caclulate the frequency axis list (x-axis) of the flux
         """
         # Get frequency axis
         start = self._hdr['CRVAL3']
@@ -213,6 +150,8 @@ class Fits2flux():
         annulus = CircularAnnulus(position, inner_radius, outter_radius)
 
         # Process the flux arrays
+        if verbose:
+            print('Calculating flux values...')
         if parallel:
             flux, flux_uncert = self._mp_flux_jobs(aperture, annulus, bkg_radius, pix2deg, beam_area, verbose)
         else:
