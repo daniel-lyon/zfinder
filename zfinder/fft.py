@@ -1,3 +1,7 @@
+"""
+Module for finding the redshift of a source using the fourier transform method.
+"""
+
 from multiprocessing import Pool
 
 import numpy as np
@@ -57,9 +61,8 @@ def _calc_all_num_gauss(transition, frequency, dz):
     gauss_peaks = find_peaks(f_exp)[0]
     return gauss_peaks
 
-def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
+def _process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     """ Use multiprocessing to significantly speed up chi2 calculations """
-  
     # Find the best fitting parameters at this redshift. If fails return bad chi2
     try:
         params, _ = calc_fft_params(transition, ffreq, fflux, dz, x0)
@@ -78,27 +81,15 @@ def process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     return reduced_chi2
 
 def _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
-    """ Doc here """
-    if verbose:
-        print('Calculating FFT fit chi-squared values...')
-    pool = Pool()
-    jobs = [pool.apply_async(process_fft_chi2_calculations, 
-        (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
-    pool.close()
-
-    # Parse results
-    chi2 = []
-    for res in tqdm(jobs, disable=not verbose):
-        chi2.append(res.get())    
+    """ Process the FFT chi2 calculations in parallel """
+    with Pool() as pool:
+        jobs = [pool.apply_async(_process_fft_chi2_calculations, (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
+        chi2 = [res.get() for res in tqdm(jobs, disable=not verbose)]
     return chi2
 
 def _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
-    """ Doc here """
-    if verbose:
-        print('Calculating FFT fit chi-squared values...')
-    chi2 = []
-    for dz in tqdm(z, disable=not verbose):
-        chi2.append(process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, frequency[0]))
+    """ Process the FFT chi2 calculations serially """
+    chi2 = [_process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, frequency[0]) for dz in tqdm(z, disable=not verbose)]
     return chi2
 
 def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
@@ -137,6 +128,8 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose
     ffreq, fflux = fft(frequency, flux)
 
     # Parallelise the chi2 calculations
+    if verbose:
+        print('Calculating FFT fit chi-squared values...')
     if parallel:
         chi2 = _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
     else:

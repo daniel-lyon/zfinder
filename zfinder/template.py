@@ -86,7 +86,11 @@ def _process_template_chi2_calculations(transition, frequency, flux, flux_uncert
     observed_transition = transition / (1 + dz)
 
     # Fit a gaussian template to the flux
-    params, _ = calc_template_params(frequency, flux, observed_transition) # best fit
+    try:
+        params, _ = calc_template_params(frequency, flux, observed_transition) # best fit
+    except RuntimeError:
+        chi2 = sum((flux)**2) * 1.2
+        return chi2
     
     # Calculate the flux of a perfect function fit
     flux_expected = gaussf(frequency, a=params[0], s=params[1], x0=observed_transition)
@@ -100,27 +104,16 @@ def _process_template_chi2_calculations(transition, frequency, flux, flux_uncert
     return reduced_chi2
 
 def _mp_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=True):
-    """ Doc here """
-    if verbose:
-        print('Calculating Template fit chi-squared values...')
-    pool = Pool()
-    jobs = [pool.apply_async(_process_template_chi2_calculations, 
-        (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
-    pool.close()
-
-    # Parse results
-    chi2 = []
-    for result in tqdm(jobs, disable=not verbose):
-        chi2.append(result.get())
+    """ Process the Template chi2 calculations in parallel """
+    with Pool() as pool:
+        jobs = [pool.apply_async(_process_template_chi2_calculations, 
+            (transition, frequency, flux, flux_uncertainty, sslf_lines, dz)) for dz in z]
+        chi2 = [result.get() for result in tqdm(jobs, disable=not verbose)]
     return chi2
 
 def _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=True):
-    """ Doc here """
-    if verbose:
-        print('Calculating Template fit chi-squared values...')
-    chi2 = []
-    for dz in tqdm(z, disable=not verbose):
-        chi2.append(_process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz))
+    """ Process the Template chi2 calculations serially """
+    chi2 = [_process_template_chi2_calculations(transition, frequency, flux, flux_uncertainty, sslf_lines, dz) for dz in tqdm(z, disable=not verbose)]
     return chi2
 
 def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
@@ -164,6 +157,8 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
 
     # Parallelise slow loop to execute much faster
+    if verbose:
+        print('Calculating Template fit chi-squared values...')
     if parallel:
         chi2 = _mp_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=verbose)
     else:
