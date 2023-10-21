@@ -56,6 +56,31 @@ class Plotter():
     
     export_fft_data()
         Export the FFT data to a csv file 
+        
+    plot_chi2_fromcsv()
+        Plot the chi-squared vs redshift from a csv file
+    
+    plot_template_flux_fromcsv()
+        Plot the template flux from a csv file
+    
+    plot_fft_flux_fromcsv()
+        Plot the fft flux from a csv file
+    
+    plot_heatmap_fromcsv()
+        Plot a heatmap of the redshifts from a csv file
+    
+    Examples
+    --------
+    >>> # After csv files exported with zfinder
+    >>> source = Plotter()
+    >>> source.plot_chi2_fromcsv('template.csv')
+    >>> source.plot_template_flux_fromcsv()
+    >>> 
+    >>> source.plot_chi2_fromcsv('fft.csv')
+    >>> source.plot_fft_flux_fromcsv()
+    >>> 
+    >>> source.plot_heatmap_fromcsv('template_per_pixel.csv')
+    >>> source.plot_heatmap_fromcsv('fft_per_pixel.csv')
     """
     
     unit_prefixes = {
@@ -407,6 +432,8 @@ class Plotter():
         """ Plot the template flux from a csv file """
         transition, frequency, flux, freq_exp, flux_exp = np.genfromtxt(filename, delimiter=',', skip_header=1, usecols=(11, 14, 15, 17, 18)).T
         transition = transition[0]
+        frequency = frequency[~np.isnan(frequency)]
+        flux = flux[~np.isnan(flux)]
         freq_exp = int(freq_exp[0])
         flux_exp = int(flux_exp[0])
         self.plot_template_flux(transition, frequency, freq_exp, flux, flux_exp)
@@ -415,6 +442,9 @@ class Plotter():
         """ Plot the fft flux from a csv file """
         transition, frequency, ffreq, fflux = np.genfromtxt(filename, delimiter=',', skip_header=1, usecols=(11, 14, 16, 17)).T
         transition = transition[0]
+        frequency = frequency[~np.isnan(frequency)]
+        ffreq = ffreq[~np.isnan(ffreq)]
+        fflux = fflux[~np.isnan(fflux)]
         self.plot_fft_flux(transition, frequency, ffreq, fflux)
     
     def plot_heatmap_fromcsv(self, filename):
