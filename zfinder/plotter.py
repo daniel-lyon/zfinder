@@ -174,6 +174,7 @@ class Plotter():
         
         # velocities = np.flipud(velocities)
         w = WCS(hdr, naxis=2)
+        plt.figure(figsize=(7,5))
         plt.subplot(projection=w)
         hm = plt.imshow(np.flipud(velocities), cmap=cmap, interpolation='nearest', vmin=-scale_velo, vmax=scale_velo,
                 extent=[x[0], x[-1], y[0], y[-1]], origin='lower')
@@ -185,7 +186,6 @@ class Plotter():
         plt.ylabel('DEC', fontsize=15)   
         plt.xticks(fontsize=15)
         plt.yticks(fontsize=15) 
-        plt.tight_layout()
         plt.savefig(f'{title.lower()}_per_pixel.png')
         if self._showfig:
             plt.show()
