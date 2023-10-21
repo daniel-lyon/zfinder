@@ -29,10 +29,7 @@ plt.rcParams['mathtext.bf'] = 'Cambria:bold'
 plt.rcParams['axes.formatter.use_mathtext'] = True
 
 # TODO: on init, calculate flux and frequency?
-# TODO: merge get_all_flux to Fits2flux class --> update get_flux to take in a list of ra and dec
-# TODO: change bkg_radius to a single value
 # TODO: remove unnecessary self attributes
-# TODO: Move all of per_pixel to zfinder
 
 class zfinder():
     """
