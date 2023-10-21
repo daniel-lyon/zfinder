@@ -7,10 +7,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.wcs import WCS
 
-from template import calc_template_params, gaussf, find_lines
-from fft import calc_fft_params, double_damped_sinusoid
-from uncertainty import z_uncert
-from utils import wcs2pix, generate_square_pix_coords
+from zfinder.template import calc_template_params, gaussf, find_lines
+from zfinder.fft import calc_fft_params, double_damped_sinusoid
+from zfinder.uncertainty import z_uncert
+from zfinder.utils import wcs2pix, generate_square_pix_coords
 
 class Plotter():
     

@@ -11,11 +11,11 @@ from astropy.io import fits
 from photutils.aperture import CircularAperture, CircularAnnulus
 from tqdm import tqdm
 
-from flux import calc_beam_area, mp_flux_jobs, serial_flux_jobs
-from template import template_zfind, template_per_pixel
-from fft import fft_zfind, fft, fft_per_pixel
-from plotter import Plotter
-from utils import get_eng_exponent, average_zeroes, wcs2pix, generate_square_world_coords
+from zfinder.flux import calc_beam_area, mp_flux_jobs, serial_flux_jobs
+from zfinder.template import template_zfind, template_per_pixel
+from zfinder.fft import fft_zfind, fft, fft_per_pixel
+from zfinder.plotter import Plotter
+from zfinder.utils import get_eng_exponent, average_zeroes, wcs2pix, generate_square_world_coords
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
