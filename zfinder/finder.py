@@ -1,5 +1,5 @@
 """
-Doc string
+Class for finding the redshift of a source in a FITS file. Exports data to csv files and plots figures.
 """
 
 import warnings
@@ -12,10 +12,11 @@ from photutils.aperture import CircularAperture, CircularAnnulus
 from tqdm import tqdm
 
 from zfinder.flux import calc_beam_area, mp_flux_jobs, serial_flux_jobs
-from zfinder.template import template_zfind, template_per_pixel
+from zfinder.template import template_zfind, template_per_pixel, find_lines
 from zfinder.fft import fft_zfind, fft, fft_per_pixel
 from zfinder.plotter import Plotter
 from zfinder.utils import get_eng_exponent, average_zeroes, wcs2pix, generate_square_world_coords
+from zfinder.uncertainty import z_uncert
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
@@ -28,15 +29,100 @@ plt.rcParams['mathtext.it'] = 'Cambria:italic'
 plt.rcParams['mathtext.bf'] = 'Cambria:bold'
 plt.rcParams['axes.formatter.use_mathtext'] = True
 
-# TODO: on init, calculate flux and frequency?
-# TODO: remove unnecessary self attributes
-
 class zfinder():
-    """
-    Doc string
-    """
+    """ 
+    zfinder is used to find the redshift of a fits image via two different methods: 
+    
+    `template` fits gaussian functions to the data to find redshift and
+    
+    `zfft` performs the fast fourier transform on the flux data to find redshift. 
+    
+    These methods will create and save a series of plots and csv files with raw data
+    by default. Can be changed with the `showfig` and `export` parameters.
 
-    def __init__(self, fitsfile, ra, dec, aperture_radius, transition, bkg_radius=50, beam_tolerance=1, showfig=True, export=True):
+    Parameters
+    ----------
+    fitsfile : `.fits`
+        A .fits image file
+    
+    ra : list
+        Right ascension of the target [h, m, s]
+    
+    dec : list
+        Declination of the target [d, m, s, esign]
+    
+    aperture_radius : float
+        Radius of the aperture to use over the source (pixels)
+
+    transition : float
+        The first transition frequency of the target element or molecule (GHz)
+        
+    bkg_radius : float, optional
+        Radius of the background annulus (pixels). Default=50
+    
+    beam_tolerance : float, optional
+        The tolerance of the beam area (arcsec). Default=1
+    
+    showfig : bool, optional
+        If True, show the figures. Default=True
+    
+    savefig : bool, optional
+        If True, save the figures. Default=True
+    
+    export : bool, optional
+        If True, export the data to csv files. Default=True
+        
+    Methods
+    -------
+    get_freq()
+        Caclulate the frequency axis
+    
+    get_flux()
+        For every frequency channel, find the flux and associated uncertainty at a position
+    
+    get_all_flux()
+        Get the flux values for all ra and dec coordinates
+    
+    template()
+        Performs the template redshift finding method
+    
+    template_pp()
+        Performs the template redshift finding method in a square around the target ra and dec
+    
+    fft()
+        Performs the fft redshift finding method
+    
+    fft_pp()
+        Performs the fft redshift finding method in a square around the target ra and dec
+    
+    Examples
+    --------
+    >>> from zfinder import zfinder
+    >>>
+    >>> fitsfile = '0856_cube_c0.4_nat_80MHz_taper3.fits'
+    >>> ra = '08:56:14.8'
+    >>> dec = '02:24:00.6'
+    >>> aperture_radius = 3
+    >>> transition = 115.2712
+    >>> z_start = 0
+    >>> dz = 0.001
+    >>> z_end = 10
+    >>> 
+    >>> source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
+    >>> source.template(z_start, dz, z_end)
+    >>> source.fft(z_start, dz, z_end)
+    >>>
+    >>> # Once redshift is found, narrow down the redshift range and run per pixel methods
+    >>> aperture_radius_pp = 0.5
+    >>> size = 15
+    >>> z_start = 5.4
+    >>> dz = 0.001
+    >>> z_end = 5.6
+    >>> source.fft_pp(size, z_start, dz, z_end, aperture_radius_pp)
+    >>> source.template_pp(size, z_start, dz, z_end, aperture_radius_pp)
+    """
+    
+    def __init__(self, fitsfile, ra, dec, aperture_radius, transition, bkg_radius=50, beam_tolerance=1, showfig=True, savefig=True, export=True):
         self._fitsfile = fitsfile
         self._hdr = fits.getheader(fitsfile)
         self._data = fits.getdata(fitsfile)[0]
@@ -48,7 +134,7 @@ class zfinder():
         self._bkg_radius = bkg_radius
         self._beam_tolerance = beam_tolerance
         self._export = export
-        self._plotter = Plotter(showfig=showfig)
+        self._plotter = Plotter(showfig=showfig, savefig=savefig)
 
         # Ignore warnings
         warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
@@ -123,11 +209,26 @@ class zfinder():
         flux_uncert = flux_uncert / 10**self._flux_exponent
         return flux, flux_uncert
 
-    def get_all_flux(self, all_ra, all_dec, aperture_radius_pp):
-        """ Get the flux values for all ra and dec coordinates """
+    def get_all_flux(self, all_ra, all_dec, aperture_radius=None):
+        """ 
+        Get the flux values for all ra and dec coordinates
+        
+        Paramters
+        ---------
+        all_ra : list
+            A list of all ra coordinates
+            
+        all_dec : list
+            A list of all dec coordinates
+        
+        aperture_radius : float
+            Radius of the aperture to use over the source (pixels). If None, use the aperture_radius
+        """
+        if aperture_radius is None:
+            aperture_radius = self._aperture_radius
         print('Calculating all flux values...')       
         with Pool() as pool:
-            jobs = [pool.apply_async(_mp_all_flux, (self._fitsfile, r, d, aperture_radius_pp, \
+            jobs = [pool.apply_async(_mp_all_flux, (self._fitsfile, r, d, aperture_radius, \
                 self._transition, self._bkg_radius, self._beam_tolerance)) for r, d in zip(all_ra, all_dec)]
             results = [res.get() for res in tqdm(jobs)]
         all_flux, all_uncert = zip(*results)
@@ -138,9 +239,46 @@ class zfinder():
         frequency = self.get_freq()
         flux, flux_uncert = self.get_flux(verbose, parallel)
         return frequency, flux, flux_uncert
+    
+    def _z_uncert(self, z, chi2, sigma):
+        """ Caclulate the uncertainty on the best fitting redshift """
+        peaks, _, _ = find_lines(self._flux)
+        reduced_sigma = sigma**2 / (len(self._flux) - 2*len(peaks) - 1)
+        neg, pos = z_uncert(z, chi2, reduced_sigma)
+        return neg, pos
 
-    def template(self, z_start=0, dz=0.01, z_end=10, sigma=1, verbose=True, parallel=True):
-        """ Doc string here """
+    def template(self, z_start=0, dz=0.001, z_end=10, sigma=1, verbose=True, parallel=True):
+        """ 
+        Perform the template redshift finding method
+        
+        Parameters
+        ----------
+        z_start : float, optional
+            The starting redshift to search from. Default=0
+            
+        dz : float, optional
+            The step size of the redshift search. Default=0.01
+        
+        z_end : float, optional
+            The ending redshift to search to. Default=10
+        
+        sigma : float, optional
+            The significance level to calculate the redshift uncertainty. Default=1
+        
+        verbose : bool, optional
+            If True, print progress. Default=True
+        
+        parallel : bool, optional
+            If True, use multiprocessing. Default=True
+        
+        Returns
+        -------
+        z : float
+            Best fit redshift 
+        
+        z_uncert : tuple(float, float)
+            Lower and upper uncertainty on the best fit redshift
+        """
         # Calculate the frequency and flux
         if not hasattr(self, '_frequency'):
             self._frequency, self._flux, self._flux_uncert = self._calc_freq_flux(verbose, parallel)
@@ -152,11 +290,41 @@ class zfinder():
         self._plotter.plot_chi2(z, dz, chi2, title='Template')
         self._plotter.plot_template_flux(self._transition, self._frequency, self._freq_exponent, self._flux, self._flux_exponent)
         if self._export:
-            self._plotter.export_template_data(filename='template.csv', sigma=sigma, flux_uncert=self._flux_uncert)
+            self._plotter._export_template_data(self._fitsfile, self._ra, self._dec, self._aperture_radius, self._transition, 
+                filename='template.csv', sigma=sigma, flux_uncert=self._flux_uncert)
+        neg, pos = self._z_uncert(z, chi2, sigma)
+        return z[np.argmin(chi2)], (neg, pos)
 
-    def template_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001):
+    def template_pp(self, size, z_start=0, dz=0.001, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001):
         """ 
-        Performs the template redshift finding method in a square around the target ra and dec
+        Performs the template redshift finding method in a square around the target ra and dec.
+        
+        Not recommended for very large redshift search ranges. Remember to narrow down the redshift
+        range before using this method. Recommended to have 100-300 redshifts to check per pixel.
+        
+        z_start = 5.4, dz = 0.001, z_end = 5.7 is a good range for GLEAM J0856.
+        
+        z_start = 4.28, dz = 0.0001, z_end = 4.31 is a good range for SPT 0345-47.
+        
+        Parameters
+        ----------
+        size : int
+            The size of a square (centred on ra and dec) to calculate redshifts in (pixels). size=15 is 15x15 pixels
+        
+        z_start : float, optional
+            The starting redshift to search from. Default=0
+        
+        dz : float, optional
+            The step size of the redshift search. Default=0.01
+        
+        z_end : float, optional
+            The ending redshift to search to. Default=10
+        
+        aperture_radius_pp : float, optional
+            Radius of the aperture to use over the source (pixels). Default=0.5
+        
+        flux_limit : float, optional
+            The minimum flux value to calculate redshifts for. Default=0.001
         """
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
@@ -169,12 +337,45 @@ class zfinder():
         
         # Plot the template pp heatmap
         if self._export:
-            self._plotter.export_heatmap_data('template_per_pixel.csv', 'w', z) # export redshifts to csv
+            header = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit']
+            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit], ['']]
+            self._plotter._write_method_to_csv('template_per_pixel.csv', header, data)
+            self._plotter._export_heatmap_data('template_per_pixel.csv', 'a', z) # export redshifts to csv
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
             z=z, title='Template', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
 
-    def fft(self, z_start=0, dz=0.01, z_end=10, sigma=1, verbose=True, parallel=True):
-        """ Doc string here """
+    def fft(self, z_start=0, dz=0.001, z_end=10, sigma=1, verbose=True, parallel=True):
+        """ 
+        Perform the fft redshift finding method
+        
+        Parameters
+        ----------
+        z_start : float, optional
+            The starting redshift to search from. Default=0
+            
+        dz : float, optional
+            The step size of the redshift search. Default=0.001
+        
+        z_end : float, optional
+            The ending redshift to search to. Default=10
+        
+        sigma : float, optional
+            The significance level to calculate the redshift uncertainty. Default=1
+            
+        verbose : bool, optional
+            If True, print progress. Default=True
+        
+        parallel : bool, optional
+            If True, use multiprocessing. Default=True
+        
+        Returns
+        -------
+        z : float
+            Best fit redshift
+        
+        z_uncert : tuple(float, float)
+            Lower and upper uncertainty on the best fit redshift
+        """
         # Calculate the frequency and flux
         if not hasattr(self, '_frequency'):
             self._frequency, self._flux, self._flux_uncert = self._calc_freq_flux(verbose, parallel)
@@ -189,11 +390,41 @@ class zfinder():
         self._plotter.plot_chi2(z, dz, chi2, title='FFT')
         self._plotter.plot_fft_flux(self._transition, self._frequency, self._ffreq, self._fflux)
         if self._export:
-            self._plotter.export_fft_data(filename='fft.csv', sigma=sigma)
+            self._plotter._export_fft_data(self._fitsfile, self._ra, self._dec, self._aperture_radius, self._transition, 
+                filename='fft.csv', sigma=sigma, frequency=self._frequency, flux=self._flux)
+        neg, pos = self._z_uncert(z, chi2, sigma)
+        return z[np.argmin(chi2)], (neg, pos)
 
     def fft_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001):
         """ 
         Performs the fft redshift finding method in a square around the target ra and dec
+        
+        Not recommended for very large redshift search ranges. Remember to narrow down the redshift
+        range before using this method. Recommended to have 100-300 redshifts to check per pixel.
+        
+        z_start = 5.4, dz = 0.001, z_end = 5.7 is a good range for GLEAM J0856.
+        
+        z_start = 4.28, dz = 0.0001, z_end = 4.31 is a good range for SPT 0345-47.
+        
+        Parameters
+        ----------
+        size : int
+            The size of a square (centred on ra and dec) to calculate redshifts in (pixels). size=15 is 15x15 pixels
+            
+        z_start : float, optional
+            The starting redshift to search from. Default=0
+        
+        dz : float, optional
+            The step size of the redshift search. Default=0.01
+        
+        z_end : float, optional
+            The ending redshift to search to. Default=10
+        
+        aperture_radius_pp : float, optional
+            Radius of the aperture to use over the source (pixels). Default=0.5
+        
+        flux_limit : float, optional
+            The minimum flux value to calculate redshifts for. Default=0.001
         """      
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
@@ -206,7 +437,10 @@ class zfinder():
 
         # Plot the fft pp heatmap
         if self._export:
-            self._plotter.export_heatmap_data('fft_per_pixel.csv', 'w', z) # export redshifts to csv
+            headings = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit']
+            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit], ['']]
+            self._plotter._write_method_to_csv('fft_per_pixel.csv', headings, data)
+            self._plotter._export_heatmap_data('fft_per_pixel.csv', 'a', z) # export redshifts to csv
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
             z=z, title='FFT', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
         
