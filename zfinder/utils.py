@@ -78,3 +78,9 @@ def generate_square_world_coords(fitsfile, ra, dec, size, aperture_radius):
     ra, dec = wcs.all_pix2world(x, y, 1)
     ra, dec = radec2str(ra, dec)
     return ra, dec
+
+def longest_decimal(numbers):
+    """ Find the longest decimal place in a list of numbers """
+    string_numbers = np.array2string(numbers)
+    length_numbers = [len(i) for i in string_numbers.split()]
+    return numbers[np.argmax(length_numbers)]
