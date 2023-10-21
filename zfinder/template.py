@@ -164,3 +164,15 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     else:
         chi2 = _serial_template_zfind(transition, frequency, flux, flux_uncertainty, z, sslf_lines, verbose=verbose)
     return z, chi2
+
+def template_per_pixel(transition, frequency, all_flux, all_flux_uncertainty, z_start=0, dz=0.01, z_end=10, size=3):
+    """ Perform the Template fitting method on all flux values """
+    print('Calculating all Template fit chi-squared values...')
+    verbose, parallel = False, False
+    with Pool() as pool:
+        jobs = [pool.apply_async(template_zfind, (transition, frequency, flux, flux_uncert, z_start, dz, z_end, verbose, parallel)) 
+            for flux, flux_uncert in zip(all_flux, all_flux_uncertainty)]
+        results = [res.get() for res in tqdm(jobs)]
+    all_z = [z[np.argmin(chi2)] for z, chi2 in results]
+    z = np.reshape(all_z, (size, size))
+    return z

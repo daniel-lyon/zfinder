@@ -135,3 +135,14 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose
     else:
         chi2 = _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
     return z, chi2
+
+def fft_per_pixel(transition, frequency, all_flux, z_start=0, dz=0.01, z_end=10, size=3):
+    """ Perform the FFT fitting method on all flux values """
+    print('Calculating all FFT fit chi-squared values...')
+    verbose, parallel = False, False
+    with Pool() as pool:
+        jobs = [pool.apply_async(fft_zfind, (transition, frequency, flux, z_start, dz, z_end, verbose, parallel)) for flux in all_flux]
+        results = [res.get() for res in tqdm(jobs)]
+    all_z = [z[np.argmin(chi2)] for z, chi2 in results]
+    z = np.reshape(all_z, (size, size))
+    return z
