@@ -8,6 +8,8 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from astropy import units as u
 from astropy.coordinates import SkyCoord, Angle
+from scipy.spatial.distance import cdist
+
 
 def wcs2pix(ra, dec, hdr):
     """ Convert RA, DEC to x, y pixel coordinates """
@@ -84,3 +86,30 @@ def longest_decimal(numbers):
     string_numbers = np.array2string(numbers)
     length_numbers = [len(i) for i in string_numbers.split()]
     return numbers[np.argmax(length_numbers)]
+
+def gen_random_coords(n, radius, centre, min_spread):
+    """ Generate a list of random x, y tuple coordinates inside a circle."""
+    coords = [centre]
+    
+    # Iterate through the number of coords.
+    for _ in range(n):
+        
+        # Keep generating the current point until it is at least the minimum distance away from all 
+        while True:
+            theta = 2 * np.pi * np.random.random() # choose a random direction
+            r = radius * np.random.random() # choose a random radius
+
+            # Convert coordinates to cartesian
+            x = r * np.cos(theta) + centre[0]
+            y = r * np.sin(theta) + centre[1]
+
+            # Find the distance between all the placed coords
+            distances = cdist([[x,y]], coords, 'euclidean')
+            min_distance = min(distances[0])
+            
+            # If the minimum distance is satisfied for all coords, go to next point
+            if min_distance >= min_spread:
+                coords.append([x,y])
+                break
+    x, y = np.transpose(coords[1:])
+    return x, y
