@@ -343,7 +343,7 @@ class zfinder():
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
             all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size, aperture_radius_pp)
-            self._all_flux, self._flux_uncertainty = self.get_all_flux(self._fitsfile, all_ra, all_dec, aperture_radius_pp)
+            self._all_flux, self._flux_uncertainty = self.get_all_flux(all_ra, all_dec, aperture_radius_pp)
 
         # Calculate the template chi2 for each pixel
         frequency = self.get_freq()
