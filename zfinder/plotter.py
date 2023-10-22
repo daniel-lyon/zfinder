@@ -347,6 +347,31 @@ class Plotter():
             plt.savefig(f'{title.lower()}_per_pixel.png')
         if self._showfig:
             plt.show()
+    
+    def plot_coords(self, x_centre, y_centre, x_coords, y_coords, radius, fitsfile=None):
+        if fitsfile is not None: 
+            hdr = fits.getheader(fitsfile)
+            w = WCS(hdr, naxis=2)
+            fig, ax = plt.subplots(subplot_kw={'projection': w})
+        else:
+            fig, ax = plt.subplots()
+        circ = plt.Circle((x_centre, y_centre), radius, fill=False, color='blue', label='_nolegend_')
+        fig.set_figwidth(7)
+        fig.set_figheight(7)
+        plt.subplots_adjust(left=0.2, right=0.8, top=0.8, bottom=0.2)
+        ax.add_patch(circ)
+        plt.scatter(x_coords, y_coords, color='blue', label='Random')
+        plt.scatter(x_centre, y_centre, color='black', label='Target')
+        plt.title(f'{len(x_coords)} random points')
+        plt.xlim(-radius-1+x_centre, radius+1+x_centre)
+        plt.ylim(-radius-1+y_centre, radius+1+y_centre)
+        plt.xlabel('RA', fontsize=15)
+        plt.ylabel('DEC', fontsize=15)
+        plt.legend(loc='upper left')
+        if self._savefig:
+            plt.savefig('Point Distribution.png', dpi=200)
+        if self._showfig:
+            plt.show()
 
     @staticmethod
     def _write_method_to_csv(filename, headings, data):
@@ -396,7 +421,7 @@ class Plotter():
         data = [*zip_longest(*results, *common, self._z, self._chi2, self._frequency, self._flux, flux_uncert, *exponents, fillvalue='')]
         self._write_method_to_csv(filename, headings, data)
 
-    def _export_fft_data(self, fitsfile, ra, dec, aperture_radius, transition, filename='fft.csv', sigma=1, frequency=None, flux=None):
+    def _export_fft_data(self, fitsfile, ra, dec, aperture_radius, transition, filename='fft.csv', sigma=1, frequency=None, flux=None, flux_uncert=1):
         """ 
         Export the FFT data to a csv file 
         
@@ -415,9 +440,11 @@ class Plotter():
         results, _ = self._calculate_results(sigma, self._fft_best_z, flux)
         headings = ['z_low_err', 'z', 'z_up_err', 'amp', 'amp_err', 'std_dev',
                     'std_dev_err', 'fitsfile', 'ra', 'dec', 'aperture_radius', 'transition',
-                    'dz', 'chi2_r', 'frequency', 'flux', 'ffreq', 'fflux']
+                    'dz', 'chi2_r', 'frequency', 'flux', 'ffreq', 'fflux', 'fflux_uncert']
+        if type(flux_uncert) == int:
+            flux_uncert = [flux_uncert]
         common = [[fitsfile], [ra], [dec], [aperture_radius], [transition]]
-        data = [*zip_longest(*results, *common, self._z, self._chi2, frequency, flux, self._ffreq, self._fflux, fillvalue='')]
+        data = [*zip_longest(*results, *common, self._z, self._chi2, frequency, flux, self._ffreq, self._fflux, flux_uncert, fillvalue='')]
         self._write_method_to_csv(filename, headings, data)
     
     def plot_chi2_fromcsv(self, filename):
@@ -457,6 +484,18 @@ class Plotter():
         hdr = fits.getheader(fitsfile)
         data = fits.getdata(fitsfile)[0]
         self.plot_heatmap(ra, dec, hdr, data, size, z, filename.split('_')[0].capitalize(), aperture_radius, flux_limit)
+    
+    def plot_coords_fromcsv(self, filename='fft_uncertainty.csv'):
+        """ Plot the distribution of random points from a csv file """
+        x_centre, y_centre, x_coords, y_coords, radius = np.genfromtxt(filename, delimiter=',', skip_header=1, usecols=(1,2,3,4,8)).T
+        fitsfile = np.genfromtxt(filename, delimiter=',', skip_header=1, dtype='U100', usecols=(10)).T
+        x_centre = x_centre[0]
+        y_centre = y_centre[0]
+        x_coords = x_coords[~np.isnan(x_coords)]
+        y_coords = y_coords[~np.isnan(y_coords)]
+        radius = radius[0]
+        fitsfile = fitsfile[0]
+        self.plot_coords(x_centre, y_centre, x_coords, y_coords, radius, fitsfile)
         
 def main():
     source = Plotter()
@@ -468,6 +507,8 @@ def main():
     
     source.plot_heatmap_fromcsv('template_per_pixel.csv')
     source.plot_heatmap_fromcsv('fft_per_pixel.csv')
+    
+    source.plot_coords_fromcsv()
 
 if __name__ == '__main__':
     main()
