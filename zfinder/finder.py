@@ -4,18 +4,20 @@ Class for finding the redshift of a source in a FITS file. Exports data to csv f
 
 import warnings
 from multiprocessing import Pool
+from itertools import zip_longest
 
 import numpy as np
 import matplotlib.pyplot as plt
-from astropy.io import fits
-from photutils.aperture import CircularAperture, CircularAnnulus
 from tqdm import tqdm
+from astropy.io import fits
+from astropy.wcs import WCS
+from photutils.aperture import CircularAperture, CircularAnnulus
 
 from zfinder.flux import calc_beam_area, mp_flux_jobs, serial_flux_jobs
 from zfinder.template import template_zfind, template_per_pixel, find_lines
 from zfinder.fft import fft_zfind, fft, fft_per_pixel
 from zfinder.plotter import Plotter
-from zfinder.utils import get_eng_exponent, average_zeroes, wcs2pix, generate_square_world_coords
+from zfinder.utils import get_eng_exponent, average_zeroes, wcs2pix, generate_square_world_coords, radec2str, gen_random_coords
 from zfinder.uncertainty import z_uncert
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
@@ -39,6 +41,15 @@ class zfinder():
     
     These methods will create and save a series of plots and csv files with raw data
     by default. Can be changed with the `showfig` and `export` parameters.
+    
+    If running in a `.py` file, you may need to add the following to your code.
+    Otherwise, jupyter notebooks should work fine.
+    
+    ```python
+    if __name__ == '__main__':
+        source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
+        ...
+    ```
 
     Parameters
     ----------
@@ -95,6 +106,9 @@ class zfinder():
     fft_pp()
         Performs the fft redshift finding method in a square around the target ra and dec
     
+    fft_uncert()
+        Calculates the uncertainty on the fft flux. 
+    
     Examples
     --------
     >>> from zfinder import zfinder
@@ -117,7 +131,7 @@ class zfinder():
     >>> size = 15
     >>> z_start = 5.4
     >>> dz = 0.001
-    >>> z_end = 5.6
+    >>> z_end = 5.7
     >>> source.fft_pp(size, z_start, dz, z_end, aperture_radius_pp)
     >>> source.template_pp(size, z_start, dz, z_end, aperture_radius_pp)
     """
@@ -344,7 +358,7 @@ class zfinder():
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
             z=z, title='Template', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
 
-    def fft(self, z_start=0, dz=0.001, z_end=10, sigma=1, verbose=True, parallel=True):
+    def fft(self, z_start=0, dz=0.001, z_end=10, sigma=1, verbose=True, parallel=True, uncertainty=False):
         """ 
         Perform the fft redshift finding method
         
@@ -368,6 +382,11 @@ class zfinder():
         parallel : bool, optional
             If True, use multiprocessing. Default=True
         
+        uncertainty : list, bool, optional
+            A list of the uncertainty values calculated by `zfinder.fft_uncert`. 
+            If True, read the uncertainty values from the csv file.
+            If False, no uncertainty values will be used for redshift calculation
+        
         Returns
         -------
         z : float
@@ -382,16 +401,21 @@ class zfinder():
         
         # Calculate the fft frequency and flux
         self._ffreq, self._fflux = fft(self._frequency, self._flux)
+        
+        if uncertainty is False:
+            uncertainty = 1
+        if uncertainty is True:
+            uncertainty = self.read_fft_uncert()
 
         # Calculate the fft chi2
-        z, chi2 = fft_zfind(self._transition, self._frequency, self._flux, z_start, dz, z_end, verbose, parallel)
+        z, chi2 = fft_zfind(self._transition, self._frequency, self._flux, uncertainty, z_start, dz, z_end, verbose, parallel)
 
         # Plot the fft chi2 and flux
         self._plotter.plot_chi2(z, dz, chi2, title='FFT')
         self._plotter.plot_fft_flux(self._transition, self._frequency, self._ffreq, self._fflux)
         if self._export:
             self._plotter._export_fft_data(self._fitsfile, self._ra, self._dec, self._aperture_radius, self._transition, 
-                filename='fft.csv', sigma=sigma, frequency=self._frequency, flux=self._flux)
+                filename='fft.csv', sigma=sigma, frequency=self._frequency, flux=self._flux, flux_uncert=uncertainty)
         neg, pos = self._z_uncert(z, chi2, sigma)
         return z[np.argmin(chi2)], (neg, pos)
 
@@ -443,6 +467,47 @@ class zfinder():
             self._plotter._export_heatmap_data('fft_per_pixel.csv', 'a', z) # export redshifts to csv
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
             z=z, title='FFT', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
+    
+    def fft_uncert(self, n=100, radius=50, min_spread=1):
+        """ Doc string here """
+        # Find x,y coordinates of the target
+        wcs = WCS(self._hdr, naxis=2)
+        center_x, center_y = wcs2pix(self._ra, self._dec, self._hdr)
+        x, y = gen_random_coords(n, radius, [center_x, center_y], min_spread)
+        # self._x_coords, self._y_coords = x, y
+            
+        # Convert x, y pix coordinates to world ra and dec
+        ra, dec = wcs.all_pix2world(x, y, 1)
+        all_ra, all_dec = radec2str(ra, dec)
+
+        # Get the flux values for all ra and dec coordinates
+        all_flux, _ = self.get_all_flux(all_ra, all_dec, self._aperture_radius)
+        freq = self.get_freq()
+        
+        # Calculate the FFT for each flux
+        all_fflux = np.transpose([fft(freq, flux)[1] for flux in all_flux])
+        
+        # Calculate the standard deviation of all the fflux channels
+        all_std = np.std(all_fflux, axis=1)
+        
+        # column headers
+        field_names = ['std', 'x_centre', 'y_centre', 'x', 'y', 'ra', 'dec', 'n', 'radius', 'min_spread', 'fitsfile']
+        dtype = [(name, object) for name in field_names]
+        data = np.array(list(zip_longest(
+            all_std, [center_x], [center_y], x, y, all_ra, all_dec, [n], [radius], 
+            [min_spread], [self._fitsfile], fillvalue='')), dtype=dtype)
+            
+        # Write the data to the csv
+        if self._export:
+            np.savetxt('.csv', data, delimiter=',', fmt='%s', header=','.join(data.dtype.names))
+        self._plotter.plot_coords(center_x, center_y, x, y, radius, fitsfile=self._fitsfile)
+        return all_std
+    
+    @staticmethod
+    def read_fft_uncert(filename='fft_uncertainty.csv'):
+        """ Read the fft uncertainty csv file """
+        std = np.genfromtxt(filename, delimiter=',', usecols=(0)).T
+        return std
         
 def _mp_all_flux(fitsfile, ra, dec, aperture_radius, transition, bkg_radius, beam_tolerance):
     """ Get the flux values for a single ra and dec coordinate """
