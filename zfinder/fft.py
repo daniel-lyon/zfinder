@@ -61,7 +61,7 @@ def _calc_all_num_gauss(transition, frequency, dz):
     gauss_peaks = find_peaks(f_exp)[0]
     return gauss_peaks
 
-def _process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
+def _process_fft_chi2_calculations(transition, frequency, uncertainty, ffreq, fflux, dz, x0):
     """ Use multiprocessing to significantly speed up chi2 calculations """
     # Find the best fitting parameters at this redshift. If fails return bad chi2
     try:
@@ -76,23 +76,23 @@ def _process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, x0):
     # Find the number of gaussians that would be overlayed at this redshift
     gauss_peaks = _calc_all_num_gauss(transition, frequency, dz)
 
-    chi2 = sum((fflux - fflux_obs)**2) # chi-squared
+    chi2 = sum(((fflux - fflux_obs) / uncertainty)**2) # chi-squared
     reduced_chi2 = chi2 / (len(fflux_obs) - 2*len(gauss_peaks) - 1)
     return reduced_chi2
 
-def _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
+def _mp_fft_zfind(transition, frequency, uncertainty, ffreq, fflux, z, verbose=True):
     """ Process the FFT chi2 calculations in parallel """
     with Pool() as pool:
-        jobs = [pool.apply_async(_process_fft_chi2_calculations, (transition, frequency, ffreq, fflux, dz, frequency[0])) for dz in z]
+        jobs = [pool.apply_async(_process_fft_chi2_calculations, (transition, frequency, uncertainty, ffreq, fflux, dz, frequency[0])) for dz in z]
         chi2 = [res.get() for res in tqdm(jobs, disable=not verbose)]
     return chi2
 
-def _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=True):
+def _serial_fft_zfind(transition, frequency, uncertainty, ffreq, fflux, z, verbose=True):
     """ Process the FFT chi2 calculations serially """
-    chi2 = [_process_fft_chi2_calculations(transition, frequency, ffreq, fflux, dz, frequency[0]) for dz in tqdm(z, disable=not verbose)]
+    chi2 = [_process_fft_chi2_calculations(transition, frequency, uncertainty, ffreq, fflux, dz, frequency[0]) for dz in tqdm(z, disable=not verbose)]
     return chi2
 
-def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
+def fft_zfind(transition, frequency, flux, uncertainty=1, z_start=0, dz=0.01, z_end=10, verbose=True, parallel=True):
     """ 
     Finds the best redshift by performing the fast fourier transform on the flux data. The
     chi-squared is caclulated at every redshift by iterating through delta-z. The most 
@@ -131,17 +131,17 @@ def fft_zfind(transition, frequency, flux, z_start=0, dz=0.01, z_end=10, verbose
     if verbose:
         print('Calculating FFT fit chi-squared values...')
     if parallel:
-        chi2 = _mp_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
+        chi2 = _mp_fft_zfind(transition, frequency, uncertainty, ffreq, fflux, z, verbose=verbose)
     else:
-        chi2 = _serial_fft_zfind(transition, frequency, ffreq, fflux, z, verbose=verbose)
+        chi2 = _serial_fft_zfind(transition, frequency, uncertainty, ffreq, fflux, z, verbose=verbose)
     return z, chi2
 
 def fft_per_pixel(transition, frequency, all_flux, z_start=0, dz=0.01, z_end=10, size=3):
     """ Perform the FFT fitting method on all flux values """
     print('Calculating all FFT fit chi-squared values...')
-    verbose, parallel = False, False
+    verbose, parallel, uncertainty = False, False, 1
     with Pool() as pool:
-        jobs = [pool.apply_async(fft_zfind, (transition, frequency, flux, z_start, dz, z_end, verbose, parallel)) for flux in all_flux]
+        jobs = [pool.apply_async(fft_zfind, (transition, frequency, flux, uncertainty, z_start, dz, z_end, verbose, parallel)) for flux in all_flux]
         results = [res.get() for res in tqdm(jobs)]
     all_z = [z[np.argmin(chi2)] for z, chi2 in results]
     z = np.reshape(all_z, (size, size))
