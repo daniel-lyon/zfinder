@@ -269,7 +269,7 @@ class Plotter():
             wr.writerows(data)
             wr.writerow('')
     
-    def plot_heatmap(self, ra, dec, hdr, data, size, z, title, aperture_radius, flux_limit, export=False):
+    def plot_heatmap(self, ra, dec, hdr, data, size, z, title, aperture_radius, flux_limit, export=False, subsize=None, contfile=None):
         """ 
         Plot a heatmap of the redshifts
         
@@ -304,22 +304,31 @@ class Plotter():
         
         export : bool, optional
             Whether to export the redshifts to a csv file. Default is True.  
+        
+        subsize : int, optional
+            Plot a smaller heatmap of the redshifts. Default is None.
         """
         # Calculate the velocities
         target_z = np.take(z, z.size // 2) # redshift of the target ra and dec
         velocities = 3*10**5*((((1 + target_z)**2 - 1) / ((1 + target_z)**2 + 1)) - (((1 + z)**2 - 1) / ((1 + z)**2 + 1))) # km/s
-        scale_velo = np.max(np.abs(velocities))
         
         # Need to get x and y coordinates to plot the heatmap with bounds for correct ra and dec
         target_pix_ra_dec = wcs2pix(ra, dec, hdr)
         x, y = generate_square_pix_coords(size, *target_pix_ra_dec, aperture_radius)
         
         # Mask velocities lower than the flux limit
-        data_summed = np.sum(np.maximum(data, 0), axis=0)
+        if contfile is not None:
+            data_summed = fits.getdata(contfile)
+        else:
+            data_summed = np.sum(np.maximum(data, 0), axis=0)
         uy = np.round(np.unique(y)).astype(int)
         ux = np.round(np.unique(x)).astype(int)
         fluxes = data_summed[uy][:, ux]
         mask = fluxes < flux_limit
+        if subsize is not None:
+            mask = self._extract_centered_subarray(mask, subsize)
+            uy = self._extract_centered_subarray_1d(uy, subsize)
+            ux = self._extract_centered_subarray_1d(ux, subsize)
         velocities[mask] = np.nan
         
         if export:
@@ -328,13 +337,14 @@ class Plotter():
 
         cmap = plt.cm.seismic
         cmap.set_bad('black')
+        scale_velo = np.nanmax(np.abs(velocities))
         
         # velocities = np.flipud(velocities)
         w = WCS(hdr, naxis=2)
         plt.figure(figsize=(7,5))
         plt.subplot(projection=w)
         hm = plt.imshow(np.flipud(velocities), cmap=cmap, interpolation='nearest', vmin=-scale_velo, vmax=scale_velo,
-                extent=[x[0], x[-1], y[0], y[-1]], origin='lower')
+                extent=[ux[0], ux[-1], uy[0], uy[-1]], origin='lower')
         cbar = plt.colorbar(hm)
         cbar.ax.set_ylabel('km/s', fontsize=15)
         cbar.ax.tick_params(labelsize=15)
@@ -474,16 +484,20 @@ class Plotter():
         fflux = fflux[~np.isnan(fflux)]
         self.plot_fft_flux(transition, frequency, ffreq, fflux)
     
-    def plot_heatmap_fromcsv(self, filename):
+    def plot_heatmap_fromcsv(self, filename, subsize=None, flux_limit=None, contfile=None):
         """ Plot a heatmap of the redshifts from a csv file """
         dtypes = [('fitsfile', 'U100'), ('ra', 'U100'), ('dec', 'U100'), ('aperture_radius', 'f8'),
           ('transition', 'f8'), ('size', 'i4'), ('flux_limit', 'f8')]
-        fitsfile, ra, dec, aperture_radius, _, size, flux_limit = \
+        fitsfile, ra, dec, aperture_radius, _, size, flux_lim = \
             np.genfromtxt(filename, delimiter=',', skip_header=1, dtype=dtypes, max_rows=2, invalid_raise=False).tolist()
         z = np.genfromtxt(filename, delimiter=',', skip_header=3, skip_footer=size*2)
+        if flux_limit is not None:
+            flux_lim = flux_limit
+        if subsize is not None:
+            z = self._extract_centered_subarray(z, subsize)
         hdr = fits.getheader(fitsfile)
         data = fits.getdata(fitsfile)[0]
-        self.plot_heatmap(ra, dec, hdr, data, size, z, filename.split('_')[0].capitalize(), aperture_radius, flux_limit)
+        self.plot_heatmap(ra, dec, hdr, data, size, z, filename.split('_')[0].capitalize(), aperture_radius, flux_lim, subsize=subsize, contfile=contfile)
     
     def plot_coords_fromcsv(self, filename='fft_uncertainty.csv'):
         """ Plot the distribution of random points from a csv file """
@@ -496,19 +510,39 @@ class Plotter():
         radius = radius[0]
         fitsfile = fitsfile[0]
         self.plot_coords(x_centre, y_centre, x_coords, y_coords, radius, fitsfile)
+    
+    @staticmethod
+    def _extract_centered_subarray(original_array, new_size):
+        """ Extract a centered subarray from a 2D array"""
+        start_row = (original_array.shape[0] - new_size) // 2
+        end_row = start_row + new_size
+        start_col = (original_array.shape[1] - new_size) // 2
+        end_col = start_col + new_size
+
+        # Extract the centered subarray
+        centered_subarray = original_array[start_row:end_row, start_col:end_col]
+        return centered_subarray
+    
+    @staticmethod
+    def _extract_centered_subarray_1d(original_array, new_size):
+        """ Extract a centered subarray from a 1D array"""
+        start_index = (original_array.shape[0] - new_size) // 2
+        end_index = start_index + new_size
+        centered_subarray = original_array[start_index:end_index]
+        return centered_subarray
         
 def main():
     source = Plotter()
-    source.plot_chi2_fromcsv('template.csv')
-    source.plot_template_flux_fromcsv()
+    # source.plot_chi2_fromcsv('template.csv')
+    # source.plot_template_flux_fromcsv()
     
-    source.plot_chi2_fromcsv('fft.csv')
-    source.plot_fft_flux_fromcsv()
+    # source.plot_chi2_fromcsv('fft.csv')
+    # source.plot_fft_flux_fromcsv()
     
-    source.plot_heatmap_fromcsv('template_per_pixel.csv')
-    source.plot_heatmap_fromcsv('fft_per_pixel.csv')
+    # source.plot_heatmap_fromcsv('template_per_pixel.csv')
+    source.plot_heatmap_fromcsv('fft_per_pixel.csv', subsize=21, flux_limit=0.01, contfile='SPT_0345-47.cont_map.fits')
     
-    source.plot_coords_fromcsv()
+    # source.plot_coords_fromcsv()
 
 if __name__ == '__main__':
     main()

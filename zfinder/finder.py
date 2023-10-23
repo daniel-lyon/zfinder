@@ -309,7 +309,7 @@ class zfinder():
         neg, pos = self._z_uncert(z, chi2, sigma)
         return z[np.argmin(chi2)], (neg, pos)
 
-    def template_pp(self, size, z_start=0, dz=0.001, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001):
+    def template_pp(self, size, z_start=0, dz=0.001, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001, contfile=None):
         """ 
         Performs the template redshift finding method in a square around the target ra and dec.
         
@@ -339,11 +339,15 @@ class zfinder():
         
         flux_limit : float, optional
             The minimum flux value to calculate redshifts for. Default=0.001
+            If contfile is specified, this is the minimum continuum flux.
+        
+        contfile : str, optional
+            The fits file containing the continuum data. Default=None
         """
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
             all_ra, all_dec = generate_square_world_coords(self._fitsfile, self._ra, self._dec, size, aperture_radius_pp)
-            self._all_flux, self._flux_uncertainty = self.get_all_flux(all_ra, all_dec, aperture_radius_pp)
+            self._all_flux, self._flux_uncertainty = self.get_all_flux(all_ra, all_dec, aperture_radius_pp)            
 
         # Calculate the template chi2 for each pixel
         frequency = self.get_freq()
@@ -351,12 +355,12 @@ class zfinder():
         
         # Plot the template pp heatmap
         if self._export:
-            header = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit']
-            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit], ['']]
+            header = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit', 'contfile']
+            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit, contfile], ['']]
             self._plotter._write_method_to_csv('template_per_pixel.csv', header, data)
             self._plotter._export_heatmap_data('template_per_pixel.csv', 'a', z) # export redshifts to csv
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
-            z=z, title='Template', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
+            z=z, title='Template', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export, contfile=contfile) # Plot the template pp heatmap
 
     def fft(self, z_start=0, dz=0.001, z_end=10, sigma=1, verbose=True, parallel=True, uncertainty=False):
         """ 
@@ -419,7 +423,7 @@ class zfinder():
         neg, pos = self._z_uncert(z, chi2, sigma)
         return z[np.argmin(chi2)], (neg, pos)
 
-    def fft_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001):
+    def fft_pp(self, size, z_start=0, dz=0.01, z_end=10, aperture_radius_pp=0.5, flux_limit=0.001, contfile=None):
         """ 
         Performs the fft redshift finding method in a square around the target ra and dec
         
@@ -449,6 +453,10 @@ class zfinder():
         
         flux_limit : float, optional
             The minimum flux value to calculate redshifts for. Default=0.001
+            If contfile is specified, this is the minimum continuum flux.
+        
+        contfile : str, optional
+            The fits file containing the continuum data. Default=None
         """      
         # If the other pp method has not been run, calculate all fluxes and uncertainties
         if not hasattr(self, '_all_flux'):
@@ -461,12 +469,12 @@ class zfinder():
 
         # Plot the fft pp heatmap
         if self._export:
-            headings = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit']
-            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit], ['']]
+            headings = ['fitsfile', 'ra', 'dec', 'aperture_radius', 'transition', 'size', 'flux_limit', 'contfile']
+            data = [[self._fitsfile, self._ra, self._dec, aperture_radius_pp, self._transition, size, flux_limit, contfile], ['']]
             self._plotter._write_method_to_csv('fft_per_pixel.csv', headings, data)
             self._plotter._export_heatmap_data('fft_per_pixel.csv', 'a', z) # export redshifts to csv
         self._plotter.plot_heatmap(ra=self._ra, dec=self._dec, hdr=self._hdr, data=self._data, size=size, \
-            z=z, title='FFT', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export) # Plot the template pp heatmap
+            z=z, title='FFT', aperture_radius=aperture_radius_pp, flux_limit=flux_limit, export=self._export, contfile=contfile) # Plot the template pp heatmap
     
     def fft_uncert(self, n=100, radius=50, min_spread=1):
         """ Doc string here """
