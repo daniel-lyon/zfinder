@@ -1,13 +1,13 @@
 # Redshift Finding Algorithm
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/zfinder-logo.png">
+  <img src="./Figures/Affiliations/zfinder-logo.png">
 </h1>
 
 <h1 align="center">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/icrar_logo.png" width="111">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/redshift.png" width="550">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/qut_logo.jpg" width="111">
+  <img src="./Figures/Affiliations/icrar_logo.png" width="111">
+  <img src="./Figures/Affiliations/redshift.png" width="550">
+  <img src="./Figures/Affiliations/qut_logo.jpg" width="111">
 </h1>
 
 zfinder is primarily designed to find the redshift of high redshift radio galaxies (HzRGs, z > ~5), but can theoretically work with lower redshifts. zfinder does this via two methods: 1) The 'Template Shifting Method' (TSM) works by fitting a sum of gaussians to flux data. By iterating through small changes in dz, the offset of the gaussian series is changed and scipy.optimize is used to fit the gaussian curves to the data. For each dz, the chi-squared statistic is calculated. The minimum chi-squared corresponds to the most likely redshift of the source. 2) The 'Fourier Transform Method' (FTM) works by performing the Fast Fourier Transform algorithm on the flux data and the gaussian functions. Similarly to the TSM, the FTM iterates through small changes in dz and calculates a minimum chi-squared where the minimum corresponds to the most likely redshift.
@@ -49,19 +49,19 @@ Example Source: J085614 + 022400
 ----------
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_flux.png">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_chi2.png">
+  <img src="./Figures/0856_flux.png">
+  <img src="./Figures/0856_chi2.png">
 </h1>
 
 <h1 align="center">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/flux_animation.gif" width="800">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/redshift_animation.gif" width="800">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/chi2_animation.gif" width="800">
+  <img src="./Figures/Animations/flux_animation.gif" width="800">
+  <img src="./Figures/Animations/redshift_animation.gif" width="800">
+  <img src="./Figures/Animations/chi2_animation.gif" width="800">
 </h1>
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_flux.png">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_chi2.png">
+  <img src="./Figures/0856_fft_flux.png">
+  <img src="./Figures/0856_fft_chi2.png">
 </h1>
 
 Other Usage
