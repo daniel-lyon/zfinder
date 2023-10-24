@@ -1,13 +1,13 @@
 # Redshift Finding Algorithm
 
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/zfinder-logo.png">
+  <img src="./figures/Affiliations/zfinder-logo.png">
 </h1>
 
 <h1 align="center">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/icrar_logo.png" width="111">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/redshift.png" width="550">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Affiliations/qut_logo.jpg" width="111">
+  <img src="./figures/Affiliations/icrar_logo.png" width="111">
+  <img src="./figures/Affiliations/redshift.png" width="550">
+  <img src="./figures/Affiliations/qut_logo.jpg" width="111">
 </h1>
 
 zfinder is primarily designed to find the redshift of high redshift radio galaxies (HzRGs, z > ~5), but can theoretically work with lower redshifts. zfinder does this via two methods: 1) The 'Template Shifting Method' (TSM) works by fitting a sum of gaussians to flux data. By iterating through small changes in dz, the offset of the gaussian series is changed and scipy.optimize is used to fit the gaussian curves to the data. For each dz, the chi-squared statistic is calculated. The minimum chi-squared corresponds to the most likely redshift of the source. 2) The 'Fourier Transform Method' (FTM) works by performing the Fast Fourier Transform algorithm on the flux data and the gaussian functions. Similarly to the TSM, the FTM iterates through small changes in dz and calculates a minimum chi-squared where the minimum corresponds to the most likely redshift.
@@ -21,23 +21,20 @@ zfinder can be installed from the terminal or command line with `pip install zfi
 Basic Usage
 -----------
 
-zfinder will automatically show and save plotted images and csv files for each method.
+zfinder will automatically show and save plotted images and csv files for each method (configurable)
 
 ```python
 from zfinder import zfinder
 
-image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
-ra = [8, 56, 14.8]
-dec = [2, 24, 0.6, 1]
-transition = 115.2712 # GHz
+fitsfile = '0856_cube_c0.4_nat_80MHz_taper3.fits'
+ra = '08:56:14.8'
+dec = '02:24:00.6'
 aperture_radius = 3 # pixels
-bvalue = 3 # arcseconds
+transition = 115.2712 # GHz
 
-gleam_0856 = zfinder(image, ra, dec, transition, aperture_radius, bvalue)
-gleam_0856.zflux()
-gleam_0856.zfft()
-gleam_0856.random_stats()
-gleam_0856.fft_per_pixel(size=3)
+gleam_0856 = zfinder(fitsfile, ra, dec, aperture_radius, transition)
+gleam_0856.template()
+gleam_0856.fft()
 ```
 
 Physical Methodology
@@ -48,61 +45,24 @@ A three dimensional `.fits` data cube of right ascension (ra), declination (dec)
 Example Source: J085614 + 022400
 ----------
 
+### Template Fitting Method
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_flux.png">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_chi2.png">
+  <img src="./figures/template_chi2.png">
+  <img src="./figures/template_flux.png">
 </h1>
 
+### Template Fitting Animation
 <h1 align="center">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/flux_animation.gif" width="800">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/redshift_animation.gif" width="800">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/Animations/chi2_animation.gif" width="800">
+  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/flux_animation.gif)
+  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/redshift_animation.gif)
+  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/chi2_animation.gif)
 </h1>
 
+### FFT Fitting Method
 <h1 align="left">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_flux.png">
-  <img src="https://github.com/daniel-lyon/zfinder/blob/main/Figures/0856_fft_chi2.png">
+  <img src="./figures/fft_chi2.png">
+  <img src="./figures/fft_flux.png">
 </h1>
-
-Other Usage
-----------
-zfinder is a wrapper on individual python files `fits2flux.py`, `flux_zfind.py`, and `fft_zfind.py`. Note that when using these files individually, no plots or csv files are generated or saved.
-
-`Fits2flux`'s main purpose is to extract the flux and frequency data from a .fits cube. It will also convert each axis to scientific notation. You can find the factor each axis has been changed by with `get_exponents()`.
-
-```python
-from zfinder import Fits2flux
-
-image = '0856_cube_c0.4_nat_80MHz_taper3.fits'
-ra = [8, 56, 14.8]
-dec = [2, 24, 0.6, 1]
-aperture_radius = 3 # pixels
-bvalue = 3 # arcseconds
-
-source = fits2flux(image, ra, dec, aperture_radius, bvalue)
-freq = gleam_0856.get_freq()
-flux, uncert = gleam_0856.get_flux()
-x, y = gleam_0856.get_exponents()
-```
-
-The main purpose of `Template` from `flux_zfind` is to use the TSM to find the redshift of the source. When using this individually from `zfinder`, you will need to supply `Template` with the flux, frequency, and uncertainty lists yourself found with `fits2flux`. 
-
-```python
-from zfinder import Template
-
-source = Template(transition, freq, flux, uncert)
-z, chi2 = source.gauss_zfind()
-```
-
-Similarly to `flux_zind`, `Fourier` from `fft_zfind` works by performing the FTM on the flux data. If you just want to return the FFTed data, you can use the `fft` method defined inside `Fourier`.
-
-```python
-from zfinder import Fourier
-
-source = Fourier(transition, freq, flux)
-z, chi2 = source.fft_zfind()
-ffreq, fflux = fft(freq, flux)
-```
 
 Citing zfinder
 ----------
