@@ -163,3 +163,5 @@ cython_debug/
 *.png
 *.csv
 *.fits
+!figures/*/*.png
+!figures/*.png
