@@ -513,36 +513,18 @@ class Plotter():
     
     @staticmethod
     def _extract_centered_subarray(original_array, new_size):
-        """ Extract a centered subarray from a 2D array"""
+        """ Extract a centered subarray from a 2D array """
         start_row = (original_array.shape[0] - new_size) // 2
         end_row = start_row + new_size
         start_col = (original_array.shape[1] - new_size) // 2
         end_col = start_col + new_size
-
-        # Extract the centered subarray
         centered_subarray = original_array[start_row:end_row, start_col:end_col]
         return centered_subarray
     
     @staticmethod
     def _extract_centered_subarray_1d(original_array, new_size):
-        """ Extract a centered subarray from a 1D array"""
+        """ Extract a centered subarray from a 1D array """
         start_index = (original_array.shape[0] - new_size) // 2
         end_index = start_index + new_size
         centered_subarray = original_array[start_index:end_index]
         return centered_subarray
-        
-def main():
-    source = Plotter()
-    # source.plot_chi2_fromcsv('template.csv')
-    # source.plot_template_flux_fromcsv()
-    
-    # source.plot_chi2_fromcsv('fft.csv')
-    # source.plot_fft_flux_fromcsv()
-    
-    # source.plot_heatmap_fromcsv('template_per_pixel.csv')
-    source.plot_heatmap_fromcsv('fft_per_pixel.csv', subsize=21, flux_limit=0.01, contfile='SPT_0345-47.cont_map.fits')
-    
-    # source.plot_coords_fromcsv()
-
-if __name__ == '__main__':
-    main()
