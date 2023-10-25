@@ -12,8 +12,9 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 
 import sphinx_rtd_theme
+# from unittest.mock import MagicMock
 
-autodoc_mock_imports = ['numpy']
+# autodoc_mock_imports = ['numpy', 'tqdm', 'scipy', 'astropy', '']
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'
