@@ -11,13 +11,13 @@ import sys
 
 # Mock imports for autodoc --- all packages your project uses that do not come pre-installed with python
 autodoc_mock_imports = [
-    'tqdm'
-    'scipy'
-    'numpy'
-    'astropy'
-    'photutils'
-    'radio_beam'
-    'matplotlib'
+    'tqdm',
+    'scipy',
+    'numpy',
+    'astropy',
+    'photutils',
+    'radio_beam',
+    'matplotlib',
     'sslf'
     ]
 
