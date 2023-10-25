@@ -9,22 +9,6 @@
 import os
 import sys
 
-# Mock imports for autodoc --- all packages your project uses that do not come pre-installed with python
-autodoc_mock_imports = [
-    'numpy', 'numpy.ma',
-    'tqdm', 
-    'scipy', 'scipy.optimize', 'scipy.signal', 'scipy.spatial.distance',
-    'astropy', 'astropy.wcs', 'astropy.io', 'astropy.coordinates',
-    'photutils', 'photutils.background', 'photutils.aperture',
-    'radio_beam', 
-    'matplotlib', 'matplotlib.pyplot', 
-    'sslf, sslf.sslf'
-    ]
-
-from unittest.mock import MagicMock
-for mod in autodoc_mock_imports:
-    sys.modules[mod] = MagicMock()
-
 sys.path.insert(0, os.path.abspath('..'))
 
 import sphinx_rtd_theme
