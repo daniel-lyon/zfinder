@@ -52,9 +52,9 @@ Example Source: J085614 + 022400
 </h1>
 
 ### Template Fitting Animation 
-![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/flux_animation.gif)
-![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/redshift_animation.gif)
-![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/chi2_animation.gif)
+![GIF Description](./figures/Animations/flux_animation.gif)
+![GIF Description](./figures/Animations/redshift_animation.gif)
+![GIF Description](./figures/Animations/chi2_animation.gif)
 
 
 ### FFT Fitting Method
@@ -62,6 +62,13 @@ Example Source: J085614 + 022400
   <img src="./figures/fft_chi2.png">
   <img src="./figures/fft_flux.png">
 </h1>
+
+### FFT Per Pixel Method
+<h1 align="center">
+  <img src="./figures/fft_per_pixel.png">
+  <img src="./figures/zoomed_fft_per_pixel.png">
+</h1>
+
 
 Citing zfinder
 ----------
