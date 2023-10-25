@@ -10,7 +10,6 @@ from astropy import units as u
 from astropy.coordinates import SkyCoord, Angle
 from scipy.spatial.distance import cdist
 
-
 def wcs2pix(ra, dec, hdr):
     """ Convert RA, DEC to x, y pixel coordinates """
     # Get the RA & DEC in degrees

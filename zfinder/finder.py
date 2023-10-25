@@ -7,7 +7,6 @@ from multiprocessing import Pool
 from itertools import zip_longest
 
 import numpy as np
-import matplotlib.pyplot as plt
 from tqdm import tqdm
 from astropy.io import fits
 from astropy.wcs import WCS
@@ -23,14 +22,6 @@ from zfinder.uncertainty import z_uncert
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="divide by zero encountered in divide", category=RuntimeWarning)
 
-plt.rcParams['font.family'] = 'serif'
-plt.rcParams['font.serif'] = ['Cambria']
-plt.rcParams['mathtext.fontset'] = 'custom'
-plt.rcParams['mathtext.rm'] = 'Cambria'
-plt.rcParams['mathtext.it'] = 'Cambria:italic'
-plt.rcParams['mathtext.bf'] = 'Cambria:bold'
-plt.rcParams['axes.formatter.use_mathtext'] = True
-
 class zfinder():
     """ 
     zfinder is used to find the redshift of a fits image via two different methods: 
@@ -45,11 +36,9 @@ class zfinder():
     If running in a `.py` file, you may need to add the following to your code.
     Otherwise, jupyter notebooks should work fine.
     
-    ```python
-    if __name__ == '__main__':
-        source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
-        ...
-    ```
+    
+    >>> if __name__ == '__main__':
+    >>>     source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
 
     Parameters
     ----------

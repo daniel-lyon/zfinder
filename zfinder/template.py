@@ -145,12 +145,9 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
 
     Example
     -------
-    ```python
-    z, chi2 = template_zfind()
-
-    lowest_index = np.argmin(chi2)
-    best_fit_redshift = z[lowest_index]
-    ```
+    >>> z, chi2 = template_zfind()
+    >>> lowest_index = np.argmin(chi2)
+    >>> best_fit_redshift = z[lowest_index]
     """
     # Create a list of redshifts to iterate through
     z = np.arange(z_start, z_end+dz, dz)

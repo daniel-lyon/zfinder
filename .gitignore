@@ -165,3 +165,4 @@ cython_debug/
 *.fits
 !figures/*/*.png
 !figures/*.png
+.pypirc
