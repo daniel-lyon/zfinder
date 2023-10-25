@@ -18,6 +18,10 @@ Installation
 ----------
 zfinder can be installed from the terminal or command line with `pip install zfinder`
 
+Documentation
+----------
+zfinder documentation can be found at [Read The Docs](https://zfinder.readthedocs.io/en/latest/)
+
 Basic Usage
 -----------
 
