@@ -23,6 +23,8 @@ Basic Usage
 
 zfinder will automatically show and save plotted images and csv files for each method (configurable)
 
+Checkout `/runs` to find example notebooks. The example `.fits` files can be downloaded from [google drive](https://drive.google.com/drive/folders/1SUbz9wjAgDrcq3tWg7qm0loz4m470G-4). 
+
 ```python
 from zfinder import zfinder
 
