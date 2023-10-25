@@ -9,10 +9,9 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath('..'))
+sys.path.insert(0, os.path.abspath('../zfinder'))
 
 import sphinx_rtd_theme
-import zfinder
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'
@@ -27,6 +26,7 @@ extensions = ["sphinx.ext.todo", "sphinx.ext.autodoc", "sphinx.ext.viewcode", "s
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'tests', 'setup.py']
 
+source_suffix = '.rst'
 
 
 # -- Options for HTML output -------------------------------------------------
