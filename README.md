@@ -51,12 +51,11 @@ Example Source: J085614 + 022400
   <img src="./figures/template_flux.png">
 </h1>
 
-### Template Fitting Animation
-<h1 align="center">
-  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/flux_animation.gif)
-  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/redshift_animation.gif)
-  ![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/chi2_animation.gif)
-</h1>
+### Template Fitting Animation 
+![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/flux_animation.gif)
+![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/redshift_animation.gif)
+![GIF Description](https://github.com/daniel-lyon/zfinder/blob/main/figures/Animations/chi2_animation.gif)
+
 
 ### FFT Fitting Method
 <h1 align="left">
