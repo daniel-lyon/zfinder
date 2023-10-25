@@ -9,9 +9,10 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.abspath('../zfinder'))
+sys.path.insert(0, os.path.abspath('..'))
 
 import sphinx_rtd_theme
+import zfinder
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'
