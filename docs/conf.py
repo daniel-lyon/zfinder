@@ -21,9 +21,9 @@ autodoc_mock_imports = [
     'sslf'
     ]
 
-# from unittest.mock import MagicMock
-# for mod in autodoc_mock_imports:
-#     sys.modules[mod] = MagicMock()
+from unittest.mock import MagicMock
+for mod in autodoc_mock_imports:
+    sys.modules[mod] = MagicMock()
 
 sys.path.insert(0, os.path.abspath('..'))
 
