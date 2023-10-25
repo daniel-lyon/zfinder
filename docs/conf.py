@@ -8,6 +8,8 @@
 
 import os
 import sys
+ 
+autodoc_mock_imports = ['numpy', 'tqdm', 'scipy', 'astropy', 'photutils', 'radio_beam', 'matplotlib', 'sslf']
 
 sys.path.insert(0, os.path.abspath('..'))
 
