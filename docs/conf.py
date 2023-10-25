@@ -11,7 +11,7 @@ import sys
 import sphinx_rtd_theme
 import zfinder
 
-sys.path.insert(0, os.path.abspath('../zfinder'))
+sys.path.insert(0, os.path.abspath('..'))
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'
