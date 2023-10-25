@@ -12,7 +12,8 @@ import sys
 sys.path.insert(0, os.path.abspath('..'))
 
 import sphinx_rtd_theme
-import zfinder
+
+autodoc_mock_imports = ['numpy']
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'
