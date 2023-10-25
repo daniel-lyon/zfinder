@@ -8,15 +8,28 @@
 
 import os
 import sys
- 
-autodoc_mock_imports = ['numpy', 'tqdm', 'scipy', 'astropy', 'photutils', 'radio_beam', 'matplotlib', 'sslf']
 
-sys.path.insert(0, os.path.abspath('..'))
+
+ 
+ # Mock imports for autodoc --- all packages your project uses that do not come pre-installed with python
+autodoc_mock_imports = [
+    'numpy', 'numpy.ma',
+    'tqdm', 
+    'scipy', 'scipy.optimize', 'scipy.signal', 'scipy.spatial.distance',
+    'astropy', 'astropy.wcs', 'astropy.io', 'astropy.coordinates',
+    'photutils', 'photutils.background', 'photutils.aperture',
+    'radio_beam', 
+    'matplotlib', 'matplotlib.pyplot', 
+    'sslf, sslf.sslf'
+    ]
+
+from unittest.mock import MagicMock
+for mod in autodoc_mock_imports:
+    sys.modules[mod] = MagicMock()
+
+sys.path.insert(0, os.path.abspath('../zfinder'))
 
 import sphinx_rtd_theme
-# from unittest.mock import MagicMock
-
-# autodoc_mock_imports = ['numpy', 'tqdm', 'scipy', 'astropy', '']
 
 project = 'zfinder'
 copyright = '2023, Daniel Lyon'

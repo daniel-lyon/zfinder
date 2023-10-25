@@ -9,11 +9,10 @@ import numpy as np
 from tqdm import tqdm
 from sslf.sslf import Spectrum
 from scipy.signal import find_peaks
-from scipy.optimize import curve_fit, OptimizeWarning
+from scipy.optimize import curve_fit
 
 warnings.filterwarnings("ignore", message="divide by zero encountered in true_divide", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message="invalid value encountered in divide", category=RuntimeWarning)
-warnings.filterwarnings("ignore", message="Covariance of the parameters could not be estimated", category=OptimizeWarning)
 
 def gaussf(x, a, s, x0):
     """ Function to fit a sum of gaussians """
