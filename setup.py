@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-VERSION = '1.0.0'
+VERSION = '1.0.2'
 DESCRIPTION = 'Redshift finding algorithm'
 LONG_DESCRIPTION = 'Find the redshift of high redshift radio galaxies'
 
@@ -13,7 +13,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,
     packages=find_packages(),
-    install_requires=['numpy', 'matplotlib', 'scipy', 'astropy', 'photutils', 'PyAstronomy', 'sslf', 'radio_beam', 'sphinx', 'sphinx_rtd_theme'],
+    install_requires=['numpy', 'matplotlib', 'scipy', 'astropy', 'photutils', 'PyAstronomy', 'sslf', 'radio_beam', 'tqdm'],
     keywords=['python', 'visualisation', 'redshift', 'galaxy-evolution', 'cosmology', 
               'epoch-of-reionisation', 'radio-galaxies', 'active-galactic-nuclei',
               'high-redshift', 'galaxies', 'black-holes'],

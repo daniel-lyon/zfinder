@@ -21,10 +21,6 @@ autodoc_mock_imports = [
     'sslf'
     ]
 
-# from unittest.mock import MagicMock
-# for mod in autodoc_mock_imports:
-#     sys.modules[mod] = MagicMock()s
-
 sys.path.insert(0, os.path.abspath('..'))
 
 import sphinx_rtd_theme
