@@ -58,7 +58,10 @@ def _penalise_chi2(gauss_lines, sslf_lines):
 
 def find_lines(flux):
     """ Create a line finder to find significant points """
-    s = Spectrum(flux)
+    try:
+        s = Spectrum(flux)
+    except ValueError:
+        return [], [], []
     s.find_cwt_peaks(scales=np.arange(4,10), snr=3)
     spec_peaks = s.channel_peaks
 
@@ -151,7 +154,6 @@ def template_zfind(transition, frequency, flux, flux_uncertainty=1, z_start=0, d
     # Create a list of redshifts to iterate through
     z = np.arange(z_start, z_end+dz, dz)
     sslf_lines, _, _ = find_lines(flux) # E.g. = [60, 270]
-
     # Parallelise slow loop to execute much faster
     if verbose:
         print('Calculating Template fit chi-squared values...')

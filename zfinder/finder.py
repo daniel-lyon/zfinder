@@ -138,10 +138,65 @@ class zfinder():
         self._beam_tolerance = beam_tolerance
         self._export = export
         self._plotter = Plotter(showfig=showfig, savefig=savefig)
+        self._no_flux_uncertainty = False
 
         # Ignore warnings
         warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
         warnings.filterwarnings("ignore", message='Metadata was averaged for keywords CHAN,POL', category=UserWarning)
+    
+    def flux_channels(self, channels):
+        """
+        Updates the fits data specified by the start and end channels.
+        Channels not in this list will be zero
+        
+        Parameters
+        ----------
+        channels : list
+            A list of channels to include in the map
+        
+        Example
+        -------
+        >>> source = zfinder(fitsfile, ra, dec, aperture_radius, transition)
+        >>> source.line_map([[20,80], [250,350]])
+        """
+        result = np.zeros(self._data.shape)
+        for start, end in channels:
+            result[start:end, :, :] = self._data[start:end, :, :]
+        self._data = result
+        self._no_flux_uncertainty = True
+
+    def export_line_map(self, channels):
+        # channels = [np.arange(start, end) for start, end in channels]
+        # channels = np.concatenate(channels)
+        # line_sum = np.sum(self._data[channels], axis=0)
+        # fits.writeto('line_cont_map.fits', line_sum, self._hdr, overwrite=True)
+        # return line_sum
+        
+        channels = [np.arange(start, end) for start, end in channels]
+        channels = np.concatenate(channels)
+        line_sum = np.sum(self._data[channels], axis=0)
+        
+        # newimage = fits.HDUList()
+        # newimage.append(fits.PrimaryHDU(header=self._hdr, data=line_sum))
+        # newimage.append(self._bin_hdu)
+        # newimage.writeto('line_map.fits', overwrite=True)
+        
+        newimage = fits.HDUList()
+        wcs = WCS(self._hdr, naxis=2)
+        hdr = wcs.to_header()
+        newimage.append(fits.PrimaryHDU(header=hdr, data=line_sum))
+        newimage.append(self._bin_hdu)
+        newimage.writeto('line_map.fits', overwrite=True)
+        
+        
+        # image_hdu = fits.PrimaryHDU(data=line_sum)
+        # wcs = WCS(self._hdr, naxis=2)
+        # image_hdu.header.extend(wcs.to_header(), useblanks=False)
+        
+        # table_hdu = fits.BinTableHDU.from_columns(fits.ColDefs(self._bin_hdu))
+        # hdulist = fits.HDUList([self._hdr, table_hdu])
+        # hdulist.writeto('line_cont_map.fits', overwrite=True)
+        return line_sum
     
     def get_freq(self):
         """ 
@@ -285,6 +340,8 @@ class zfinder():
         # Calculate the frequency and flux
         if not hasattr(self, '_frequency'):
             self._frequency, self._flux, self._flux_uncert = self._calc_freq_flux(verbose, parallel)
+        if self._no_flux_uncertainty:
+            self._flux_uncert = np.array([1])
 
         # Calculate the template chi2
         z, chi2 = template_zfind(self._transition, self._frequency, self._flux, self._flux_uncert, z_start, dz, z_end, verbose, parallel)

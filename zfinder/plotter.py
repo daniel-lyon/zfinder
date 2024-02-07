@@ -17,6 +17,8 @@ from zfinder.utils import wcs2pix, generate_square_pix_coords, longest_decimal
 warnings.filterwarnings(action="ignore", message='Some errors were detected !')
 warnings.filterwarnings("ignore", module='astropy.wcs.wcs')
 
+# TODO: raise warning if subsize is larger than size and set subsize to size
+
 class Plotter():
     """ 
     Class to plot the results of zfinder. Includes methods of plotting exported csv data

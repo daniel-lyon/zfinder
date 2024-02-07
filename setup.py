@@ -1,8 +1,15 @@
 from setuptools import setup, find_packages
+import re
 
-VERSION = '1.0.2'
 DESCRIPTION = 'Redshift finding algorithm'
 LONG_DESCRIPTION = 'Find the redshift of high redshift radio galaxies'
+
+with open('./zfinder/__init__.py', 'r') as f:
+    contents = f.read()
+    VERSION = re.search(r"__version__ = '(.+)'", contents).group(1)
+
+with open('requirements.txt', 'r') as f:
+    requirements = f.read().splitlines()
 
 setup(
     name="zfinder",
@@ -13,7 +20,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,
     packages=find_packages(),
-    install_requires=['numpy', 'matplotlib', 'scipy', 'astropy', 'photutils', 'PyAstronomy', 'sslf', 'radio_beam', 'tqdm'],
+    install_requires=requirements,
     keywords=['python', 'visualisation', 'redshift', 'galaxy-evolution', 'cosmology', 
               'epoch-of-reionisation', 'radio-galaxies', 'active-galactic-nuclei',
               'high-redshift', 'galaxies', 'black-holes'],
