@@ -166,3 +166,4 @@ cython_debug/
 !figures/*/*.png
 !figures/*.png
 .pypirc
+/newstuff
